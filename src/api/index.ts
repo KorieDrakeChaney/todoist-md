@@ -114,7 +114,6 @@ export class TodoistAPI {
 
   private clear() {
     this.commands = [];
-    this.syncedItems = {};
   }
 
   async pull() {
@@ -132,12 +131,12 @@ export class TodoistAPI {
   }
 
   async push() {
-    new Notice("Syncing Todoist projects...");
+    new Notice("Pushing to Todoist...");
     try {
       const diff = await this.getDiff(true);
       await this.sync();
       await this.writeDiff(diff);
-      new Notice("Todoist projects synced!");
+      new Notice("Pushed to Todoist!");
     } catch (error) {
       new Notice("Error syncing Todoist projects");
     }
@@ -301,6 +300,8 @@ export class TodoistAPI {
       if (!(await this.vault.adapter.exists(filePath))) {
         delete this.plugin.settings.registeredFiles[filePath];
         await this.plugin.saveSettings();
+
+        continue;
       }
 
       let content = await this.vault.adapter.read(filePath);
@@ -713,16 +714,14 @@ export class TodoistAPI {
     let todos: Record<string, Todo> = {};
 
     const filteredBody: (string | Todo)[] = body.filter((todo) => {
-      if (typeof todo === "string") return true;
+      if (typeof todo === "string") return false;
       if (todo.id) {
         todos[todo.id] = todo;
-        return false;
+        return true;
       }
-      return true;
+      return false;
     });
     filteredBody.push(inboxText);
-
-    console.log(todos);
 
     await this.registerFile(filePath, todos);
 
