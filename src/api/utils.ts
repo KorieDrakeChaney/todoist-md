@@ -160,7 +160,10 @@ export const parseTodo = (
         }
         break;
       case "LABEL":
-        if (line[cursor] >= "a" && line[cursor] <= "z") {
+        if (
+          (line[cursor] >= "a" && line[cursor] <= "z") ||
+          (line[cursor] >= "A" && line[cursor] <= "Z")
+        ) {
           buffer += line[cursor];
         } else {
           if (buffer.length > 0) {
@@ -196,9 +199,10 @@ export const parseTodo = (
           state = "CONTENT";
           due = getDueDate(potentialDue);
           if (!due) {
-            content += buffer;
+            content += buffer + ")";
           }
           potentialDue = "";
+          buffer = "";
         } else {
           potentialDue += line[cursor];
           buffer += line[cursor];
@@ -574,35 +578,6 @@ export const sortTodos = (body: (string | Todo)[]): (string | Todo)[] => {
 
     return a.priority - b.priority;
   });
-};
-
-export const parseTodos = (
-  source: string,
-  isCodeBlock: boolean = false
-): (string | Todo)[] => {
-  const lines = source.split("\n");
-  const body: (string | Todo)[] = [];
-
-  let buffer = "";
-
-  for (const line of lines) {
-    const todo = parseTodo(line, isCodeBlock);
-    if (todo) {
-      if (buffer.length > 0) {
-        body.push(buffer);
-        buffer = "\n";
-      }
-      body.push(todo);
-    } else {
-      buffer += line + "\n";
-    }
-  }
-
-  if (buffer.length > 0) {
-    body.push(buffer);
-  }
-
-  return body;
 };
 
 export const insertTextAtPosition = (

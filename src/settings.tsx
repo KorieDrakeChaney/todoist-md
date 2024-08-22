@@ -37,7 +37,6 @@ export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
 
 export class TodoistMarkdownSettingTab extends PluginSettingTab {
   private readonly plugin: TodoistMarkdownPlugin;
-  private root: Root | undefined;
 
   constructor(plugin: TodoistMarkdownPlugin) {
     super(plugin.app, plugin);
@@ -59,6 +58,27 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
           createReactModal(this.plugin, "TokenValidatorModal").open();
         })
       );
+
+    this.createGroup("General");
+
+    new Setting(containerEl)
+      .setName("Todoist Directory")
+      .setDesc("Directory to store todoist files")
+      .addDropdown((dropdown) => {
+        const folders = this.plugin.app.vault.getAllFolders();
+
+        dropdown.addOptions(
+          folders.reduce((acc: Record<string, string>, folder) => {
+            acc[folder.name] = folder.path;
+            return acc;
+          }, {})
+        );
+
+        dropdown.onChange(async (value) => {
+          this.plugin.settings.directory = value;
+          await this.plugin.saveSettings();
+        });
+      });
 
     this.createGroup("Editor");
 
@@ -110,11 +130,6 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
             this.display();
           })
         );
-    }
-
-    if (!this.root) {
-      let el = containerEl.createDiv();
-      this.root = createRoot(el);
     }
   }
 

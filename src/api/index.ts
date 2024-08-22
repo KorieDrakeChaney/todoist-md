@@ -40,7 +40,6 @@ import {
   compareDueDates,
   generateUUID,
   getUpdatedItem,
-  parseTodos,
   parseFile,
   parseTodo,
   shouldComplete,
@@ -183,11 +182,19 @@ export class TodoistAPI {
       body: ""
     };
 
+    this.syncedItems = {};
+
     params.body = new URLSearchParams({
       annotate_items: "true"
     }).toString();
 
     const completedResponse = await obsidianFetch(params);
+
+    if (completedResponse.status !== 200) {
+      throw new Error(
+        `Error syncing Todoist projects: ${completedResponse.body}`
+      );
+    }
 
     const completedData = parseResponse<TodoistCompletedResponse>(
       completedResponse.body
@@ -344,6 +351,10 @@ export class TodoistAPI {
       index++;
     }
 
+    if (!(await this.vault.adapter.exists(this.directory))) {
+      await this.vault.adapter.mkdir(this.directory);
+    }
+
     const { files } = await this.vault.adapter.list(this.directory);
 
     const syncedProjectsCopy = { ...this.syncedProjects };
@@ -393,11 +404,10 @@ export class TodoistAPI {
         delete syncedProjectsCopy[projId];
       }
 
-      let buffer: string = "";
-
       const lines = content.split("\n");
       const body: (string | Todo)[] = [];
 
+      let buffer: string = "";
       let todoDiff: Record<string, boolean> = {};
 
       for (const line of lines) {
@@ -405,7 +415,7 @@ export class TodoistAPI {
         if (todo) {
           if (buffer.length > 0) {
             body.push(buffer);
-            buffer = "\n";
+            buffer = "";
           }
 
           let syncedItem = this.syncedItems[todo.id];
