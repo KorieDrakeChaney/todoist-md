@@ -1,0 +1,42 @@
+.token-modal {
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.token-input {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 7.5px;
+  align-items: end;
+}
+
+.token-input-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.token-input input {
+  width: 100%;
+  border-radius: 5px;
+}
+
+.token-header-2 {
+  font-weight: 600;
+}
+
+.button {
+  background-color: hsl(254, 80%, 68%) !important;
+  cursor: pointer;
+}
+
+.button:hover {
+  background-color: hsl(254, 80%, 60%) !important;
+}
+
+.token-sync {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}

@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "module": "ESNext",
+    "target": "ES2018", // Updated target to ES2018
+    "allowJs": true,
+    "noImplicitAny": true,
+    "moduleResolution": "node",
+    "importHelpers": true,
+    "lib": ["dom", "scripthost", "ES2023"]
+  },
+  "include": ["**/*.ts", "src/ui/context.tsx"]
+}

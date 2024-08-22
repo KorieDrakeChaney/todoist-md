@@ -1,0 +1,21 @@
+.primary {
+  background-color: hsl(
+    var(--accent-h),
+    var(--accent-s),
+    var(--accent-l)
+  ) !important;
+}
+
+.primary:hover {
+  background-color: hsl(
+    var(--accent-h),
+    var(--accent-s),
+    calc(var(--accent-l) - 8%)
+  ) !important;
+}
+
+.button-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
