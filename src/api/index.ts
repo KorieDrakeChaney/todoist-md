@@ -608,7 +608,10 @@ export class TodoistAPI {
   }
 
   private async writeBody(projPath: string, body: (string | Todo)[]) {
-    await this.vault.adapter.write(projPath, this.getContentOfBody(body));
+    await this.vault.adapter.write(
+      projPath,
+      this.getContentOfBody(body).trimEnd()
+    );
   }
 
   private getContentOfBody(body: (string | Todo)[]): string {
@@ -757,7 +760,7 @@ export class TodoistAPI {
           lineStart: sectionInfo.lineStart,
           lineEnd: sectionInfo.lineEnd
         }
-      )
+      ).trimEnd()
     );
 
     if (body.length > 0) {
