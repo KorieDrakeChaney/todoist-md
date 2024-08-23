@@ -587,6 +587,25 @@ export class TodoistAPI {
     }
   }
 
+  async filter(filter: string): Promise<ItemResponse[]> {
+    const encodedFilter = encodeURIComponent(filter);
+    const params: RequestParams = {
+      url: `${restUrl}/tasks?filter=${encodedFilter}`,
+      headers: {
+        Authorization: `Bearer ${this.plugin.settings.token}`
+      },
+      method: "GET"
+    };
+
+    const response = await obsidianFetch(params);
+
+    if (response.status !== 200) {
+      throw new Error(`Error fetching filter: ${response.body}`);
+    }
+
+    return parseResponse<ItemResponse[]>(response.body);
+  }
+
   private async writeBody(projPath: string, body: (string | Todo)[]) {
     await this.vault.adapter.write(projPath, this.getContentOfBody(body));
   }
@@ -616,7 +635,7 @@ export class TodoistAPI {
         };
       }
 
-      let id = tempIdMapped ? tempIdMapped : todo.id;
+      let id = tempIdMapped ? tempIdMapped : this.syncedItems[todo.id]?.id;
       let due = todo.due ? `(@${todo.due.date})` : "";
 
       let labels = todo.labels.length ? `#${todo.labels.join(" #")}` : "";
@@ -666,19 +685,13 @@ export class TodoistAPI {
     let filePath = ctx.sourcePath;
 
     let lines = source.split("\n");
-    let buffer = "";
-
-    let body: (string | Todo)[] = [];
+    let body: Todo[] = [];
+    let filters: string[] = [];
 
     for (let line of lines) {
       let todo = parseTodo(line, true);
 
       if (todo) {
-        if (buffer) {
-          body.push(buffer);
-          buffer = "";
-        }
-
         todo.id = generateUUID();
 
         this.itemAdd(
@@ -694,12 +707,30 @@ export class TodoistAPI {
 
         body.push(todo);
       } else {
-        buffer += line + "\n";
+        if (line.length > 0) filters.push(line);
       }
     }
 
-    if (buffer) {
-      body.push(buffer);
+    for (let filter of filters) {
+      try {
+        const items = await this.filter(filter);
+
+        for (let item of items) {
+          let todo = {
+            id: item.id,
+            content: item.content,
+            due: item.due,
+            priority: item.priority,
+            labels: item.labels,
+            completed: !!item.completed_at,
+            project_id: item.project_id
+          };
+
+          body.push(todo);
+        }
+      } catch (error: unknown) {
+        new Notice(error.toString());
+      }
     }
 
     await this.sync();
@@ -723,19 +754,16 @@ export class TodoistAPI {
 
     let todos: Record<string, Todo> = {};
 
-    const filteredBody: (string | Todo)[] = body.filter((todo) => {
-      if (typeof todo === "string") return false;
-      if (todo.id) {
-        todos[todo.id] = todo;
-        return true;
-      }
-      return false;
-    });
-    filteredBody.push(inboxText);
+    for (let todo of body) {
+      todos[todo.id] = todo;
+    }
+
+    let contentBody: (string | Todo)[] = body;
+    contentBody.push(inboxText);
 
     await this.registerFile(filePath, todos);
 
-    await this.writeBody(inboxFilePath, filteredBody);
+    await this.writeBody(inboxFilePath, contentBody);
   }
 
   private async registerFile(file: string, todos: Record<string, Todo>) {

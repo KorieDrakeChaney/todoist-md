@@ -196,13 +196,15 @@ export const parseTodo = (
         break;
       case "DUE_DATE":
         if (line[cursor] == ")") {
-          state = "CONTENT";
           due = getDueDate(potentialDue);
+          potentialDue = "";
+          buffer = "";
+
           if (!due) {
             content += buffer + ")";
           }
-          potentialDue = "";
-          buffer = "";
+
+          state = "CONTENT";
         } else {
           potentialDue += line[cursor];
           buffer += line[cursor];
@@ -377,22 +379,53 @@ export const generateUUID = (): string => {
 };
 
 const getDueDate = (date: string): DueDate | null => {
-  let match = date.match(/(\d{4}-\d{2}-\d{2})/);
-  if (!match) return null;
+  let dateObj: Date;
 
-  const dateObj = new Date(date);
+  switch (date.toLowerCase()) {
+    case "today":
+      dateObj = new Date();
+      break;
+    case "tomorrow":
+      dateObj = new Date();
+      dateObj.setDate(dateObj.getDate() + 1);
+      break;
+    case "monday":
+    case "tuesday":
+    case "wednesday":
+    case "thursday":
+    case "friday":
+    case "saturday":
+    case "sunday":
+      dateObj = new Date();
+      const currentDay = dateObj.getDay();
+      const targetDay = [
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday"
+      ].indexOf(date);
+      const dayDifference = (targetDay + 7 - currentDay) % 7;
+      dateObj.setDate(dateObj.getDate() + dayDifference);
+      break;
+    default:
+      dateObj = new Date(date);
 
-  if (dateObj.toString() === "Invalid Date") {
-    return null;
+      if (dateObj.toString() === "Invalid Date") {
+        return null;
+      }
+      break;
   }
 
-  const day = dateObj.getDate();
-  const month = getMonth(dateObj.getMonth() + 1);
+  const day = dateObj.getDate().toString().padStart(2, "0");
+  const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
 
   return {
-    date: date,
+    date: `${dateObj.getFullYear()}-${month}-${day}`,
     timezone: null,
-    string: `${month} ${day}`,
+    string: `${getMonth(dateObj.getMonth() + 1)} ${day}`,
     lang: "en",
     is_recurring: false
   };
