@@ -28,6 +28,14 @@ https://github.com/user-attachments/assets/78607002-b869-43e0-8a99-c261316ddb0f
 
 https://github.com/user-attachments/assets/55794c06-4226-451c-94be-b46ee63a0ba0
 
+- Filter Tasks using the powerful [Todoist Filters](https://todoist.com/help/articles/introduction-to-filters-V98wIH#introduction)
+
+https://github.com/user-attachments/assets/e925c841-89cf-414a-aa53-49f8dc764e11
+
+- Create Dates using relative dates
+
+https://github.com/user-attachments/assets/2ac67eb4-9282-44b4-a6a4-a579cc5e3043
+
 ## Goals
 
 - [ ] Gamify the process of completing tasks.
