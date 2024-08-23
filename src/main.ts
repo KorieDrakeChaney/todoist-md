@@ -24,7 +24,7 @@ export default class TodoistMarkdownPlugin extends Plugin {
     this.registerMarkdownCodeBlockProcessor(
       "todomd",
       async (source, el, ctx) => {
-        this.services.todoistAPI.pushCodeBlock(source, el, ctx);
+        await this.services.todoistAPI.pushCodeBlock(source, el, ctx);
       }
     );
 

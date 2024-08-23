@@ -711,6 +711,18 @@ export class TodoistAPI {
       }
     }
 
+    await this.sync();
+
+    let inboxFilePath = this.getFilePath({
+      name: "Inbox",
+      id: this.inbox_id
+    });
+    let bodyContent = this.getContentOfBody(body);
+    let inboxContent = await this.vault.adapter.read(inboxFilePath);
+    await this.vault.adapter.write(inboxFilePath, bodyContent + inboxContent);
+
+    let filterTodos: Todo[] = [];
+
     for (let filter of filters) {
       try {
         const items = await this.filter(filter);
@@ -726,48 +738,42 @@ export class TodoistAPI {
             project_id: item.project_id
           };
 
-          body.push(todo);
+          filterTodos.push(todo);
         }
       } catch (error: unknown) {
         new Notice(error.toString());
       }
     }
 
-    await this.sync();
-
-    const content = this.getContentOfBody(body);
+    const filterContent = this.getContentOfBody(filterTodos);
 
     await this.vault.adapter.write(
       filePath,
-      insertTextAtPosition(content, sectionInfo.text, {
+      insertTextAtPosition(bodyContent + filterContent, sectionInfo.text, {
         lineStart: sectionInfo.lineStart,
         lineEnd: sectionInfo.lineEnd
       })
     );
 
-    let inboxFilePath = this.getFilePath({
-      name: "Inbox",
-      id: this.inbox_id
-    });
-
-    const inboxText = await this.vault.adapter.read(inboxFilePath);
-
-    let todos: Record<string, Todo> = {};
-
-    for (let todo of body) {
-      todos[todo.id] = todo;
-    }
-
-    let contentBody: (string | Todo)[] = body;
-    contentBody.push(inboxText);
-
-    await this.registerFile(filePath, todos);
-
-    await this.writeBody(inboxFilePath, contentBody);
+    this.registerFile(
+      filePath,
+      body.reduce((acc, todo) => {
+        acc[todo.id] = todo;
+        return acc;
+      }, {} as Record<string, Todo>)
+    );
   }
 
   private async registerFile(file: string, todos: Record<string, Todo>) {
-    this.plugin.settings.registeredFiles[file] = todos;
+    let registeredFile = this.plugin.settings.registeredFiles[file];
+
+    if (registeredFile)
+      this.plugin.settings.registeredFiles[file] = {
+        ...registeredFile,
+        ...todos
+      };
+    else this.plugin.settings.registeredFiles[file] = todos;
+
     await this.plugin.saveSettings();
   }
 
