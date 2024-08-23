@@ -755,13 +755,15 @@ export class TodoistAPI {
       })
     );
 
-    this.registerFile(
-      filePath,
-      body.reduce((acc, todo) => {
-        acc[todo.id] = todo;
-        return acc;
-      }, {} as Record<string, Todo>)
-    );
+    if (body.length > 0) {
+      this.registerFile(
+        filePath,
+        body.reduce((acc, todo) => {
+          acc[todo.id] = todo;
+          return acc;
+        }, {} as Record<string, Todo>)
+      );
+    }
   }
 
   private async registerFile(file: string, todos: Record<string, Todo>) {

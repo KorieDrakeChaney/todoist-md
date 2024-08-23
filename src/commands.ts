@@ -6,7 +6,7 @@ import { ProjectResponse } from "./api/response";
 const commands = {
   "todoist-push": {
     name: "Push Todoist",
-    callback: async (editor: Editor, plugin: TodoistMarkdownPlugin) => {
+    callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
       if (await plugin.services.todoistAPI.healthCheck()) {
         await plugin.services.todoistAPI.push();
       }
@@ -14,7 +14,7 @@ const commands = {
   },
   "todoist-pull": {
     name: "Pull Todoist",
-    callback: async (editor: Editor, plugin: TodoistMarkdownPlugin) => {
+    callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
       if (await plugin.services.todoistAPI.healthCheck()) {
         await plugin.services.todoistAPI.pull();
       }

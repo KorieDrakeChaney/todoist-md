@@ -624,17 +624,17 @@ export const insertTextAtPosition = (
 
   while (cursor < lines.length) {
     if (cursor === position.lineStart) {
-      newBody += text + "\n".repeat(position.lineEnd - position.lineStart + 1);
+      newBody += text;
     }
-    if (cursor < position.lineStart || cursor > position.lineEnd) {
-      newBody += lines[cursor] + "\n";
-    }
+    newBody += lines[cursor] + "\n";
     cursor++;
   }
 
-  // If the position is at the end of the body
   if (position.lineStart >= lines.length) {
-    newBody += "\n".repeat(position.lineStart - lines.length + 1);
+    let diff = position.lineStart - lines.length;
+    if (diff > 0) {
+      newBody += "\n".repeat(diff - 1);
+    }
     newBody += text;
   }
 
