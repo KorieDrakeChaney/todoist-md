@@ -426,6 +426,7 @@ export class TodoistAPI {
           }
 
           if (!todo.id || !syncedItem || todoDiff[todo.id]) {
+            if (!todo.priority) todo.priority = 1;
             todo.id = generateUUID();
 
             if (canChange)
