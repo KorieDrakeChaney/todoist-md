@@ -34,7 +34,7 @@ https://github.com/user-attachments/assets/e925c841-89cf-414a-aa53-49f8dc764e11
 
 - Create Dates using relative dates
 
-https://github.com/user-attachments/assets/2ac67eb4-9282-44b4-a6a4-a579cc5e3043
+https://github.com/user-attachments/assets/ff488571-7de8-4aae-9364-746866768ec8
 
 ## Goals
 
