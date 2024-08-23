@@ -45,7 +45,8 @@ import {
   shouldComplete,
   shouldUncomplete,
   sortTodos,
-  insertTextAtPosition
+  insertTextAtPosition,
+  ignoreCodeBlock
 } from "./utils";
 import { Priority, Project, Todo, TodoItem } from "./types";
 
@@ -749,10 +750,14 @@ export class TodoistAPI {
 
     await this.vault.adapter.write(
       filePath,
-      insertTextAtPosition(bodyContent + filterContent, sectionInfo.text, {
-        lineStart: sectionInfo.lineStart,
-        lineEnd: sectionInfo.lineEnd
-      })
+      insertTextAtPosition(
+        bodyContent + filterContent,
+        ignoreCodeBlock(sectionInfo.text),
+        {
+          lineStart: sectionInfo.lineStart,
+          lineEnd: sectionInfo.lineEnd
+        }
+      )
     );
 
     if (body.length > 0) {

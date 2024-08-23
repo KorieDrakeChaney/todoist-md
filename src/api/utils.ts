@@ -640,3 +640,32 @@ export const insertTextAtPosition = (
 
   return newBody;
 };
+
+type CodeBlockCleanState = "BEFORE_CODE" | "CODE";
+
+export const ignoreCodeBlock = (body: string): string => {
+  let state: CodeBlockCleanState = "BEFORE_CODE";
+  let cursor = 0;
+  let content = "";
+  let lines = body.split("\n");
+
+  while (cursor < lines.length) {
+    switch (state) {
+      case "BEFORE_CODE":
+        if (lines[cursor].trim() === "```todomd") {
+          state = "CODE";
+        } else {
+          content += lines[cursor] + "\n";
+        }
+        break;
+      case "CODE":
+        if (lines[cursor].trim() === "```") {
+          state = "BEFORE_CODE";
+        }
+        break;
+    }
+    cursor++;
+  }
+
+  return content;
+};
