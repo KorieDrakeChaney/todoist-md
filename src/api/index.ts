@@ -47,7 +47,7 @@ import {
   insertTextAtPosition,
   ignoreCodeBlock
 } from "./utils";
-import { Priority, Project, Todo, TodoItem } from "./types";
+import { Priority, Project, Todo, TodoBody, TodoItem } from "./types";
 
 type TodoistSyncResponse = {
   sync_token: string;
@@ -308,9 +308,10 @@ export class TodoistAPI {
       }
 
       let content = await this.vault.adapter.read(filePath);
+      let todoCopy = { ...todos };
 
       let lines = content.split("\n");
-      let body: (string | Todo)[] = [];
+      let body: TodoBody = [];
       let buffer = "";
 
       for (let line of lines) {
@@ -325,12 +326,17 @@ export class TodoistAPI {
             todos[todo.id] = todo;
             syncedRegisteredTodos[todo.id] = todo;
             body.push(todo);
+            delete todoCopy[todo.id];
           } else {
             buffer += line + "\n";
           }
         } else {
           buffer += line + "\n";
         }
+      }
+
+      for (const [todoId, _] of Object.entries(todoCopy)) {
+        delete todos[todoId];
       }
 
       if (buffer) {
@@ -346,6 +352,8 @@ export class TodoistAPI {
 
       index++;
     }
+
+    await this.plugin.saveSettings();
 
     if (!(await this.vault.adapter.exists(this.directory))) {
       await this.vault.adapter.mkdir(this.directory);
@@ -402,7 +410,7 @@ export class TodoistAPI {
       }
 
       const lines = content.split("\n");
-      const body: (string | Todo)[] = [];
+      const body: TodoBody = [];
 
       let buffer: string = "";
       let todoDiff: Record<string, boolean> = {};
@@ -613,14 +621,14 @@ export class TodoistAPI {
     return parseResponse<ItemResponse[]>(response.body);
   }
 
-  private async writeBody(projPath: string, body: (string | Todo)[]) {
+  private async writeBody(projPath: string, body: TodoBody) {
     await this.vault.adapter.write(
       projPath,
       this.getContentOfBody(body).trimEnd()
     );
   }
 
-  private getContentOfBody(body: (string | Todo)[]): string {
+  private getContentOfBody(body: TodoBody): string {
     let content = "";
 
     for (let todo of this.plugin.settings.sortTodos ? sortTodos(body) : body) {
@@ -768,6 +776,8 @@ export class TodoistAPI {
         }
       ).trimEnd()
     );
+
+    body = body.concat(filterTodos);
 
     if (body.length > 0) {
       this.registerFile(

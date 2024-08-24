@@ -2,6 +2,7 @@ import { Editor, Notice } from "obsidian";
 import TodoistMarkdownPlugin from "./main";
 import { parseResponse } from "./parser/json";
 import { ProjectResponse } from "./api/response";
+import { createReactModal } from "./ui/modal";
 
 const commands = {
   "todoist-soft-pull": {
@@ -9,6 +10,8 @@ const commands = {
     callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
       if (await plugin.services.todoistAPI.healthCheck()) {
         await plugin.services.todoistAPI.softPull();
+      } else {
+        createReactModal(plugin, "TokenValidatorModal").open();
       }
     }
   },
@@ -17,6 +20,8 @@ const commands = {
     callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
       if (await plugin.services.todoistAPI.healthCheck()) {
         await plugin.services.todoistAPI.forcedPull();
+      } else {
+        createReactModal(plugin, "TokenValidatorModal").open();
       }
     }
   },
@@ -25,6 +30,8 @@ const commands = {
     callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
       if (await plugin.services.todoistAPI.healthCheck()) {
         await plugin.services.todoistAPI.softPush();
+      } else {
+        createReactModal(plugin, "TokenValidatorModal").open();
       }
     }
   },
@@ -34,6 +41,8 @@ const commands = {
     callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
       if (await plugin.services.todoistAPI.healthCheck()) {
         await plugin.services.todoistAPI.forcedPush();
+      } else {
+        createReactModal(plugin, "TokenValidatorModal").open();
       }
     }
   }

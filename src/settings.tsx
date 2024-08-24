@@ -64,12 +64,22 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Todoist Directory")
       .setDesc("Directory to store todoist files")
-      .addDropdown((dropdown) => {
-        const folders = this.plugin.app.vault.getAllFolders();
+      .addDropdown(async (dropdown) => {
+        const folders = this.plugin.app.vault
+          .getAllFolders()
+          .map((folder) => folder.path);
+
+        if (
+          folders.indexOf(this.plugin.settings.directory) === -1 &&
+          folders.length > 0
+        ) {
+          this.plugin.settings.directory = folders[0];
+          await this.plugin.saveSettings();
+        }
 
         dropdown.addOptions(
           folders.reduce((acc: Record<string, string>, folder) => {
-            acc[folder.name] = folder.path;
+            acc[folder] = folder;
             return acc;
           }, {})
         );

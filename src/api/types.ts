@@ -66,3 +66,5 @@ export type TodoistColor =
   | "taupe";
 
 export type TodoistViewStyle = "list" | "board";
+
+export type TodoBody = (string | Todo)[];
