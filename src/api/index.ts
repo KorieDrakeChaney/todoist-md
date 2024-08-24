@@ -1,5 +1,5 @@
 import TodoistMarkdownPlugin from "src/main";
-import { obsidianFetch, RequestParams, WebResponse } from "./fetch";
+import { obsidianFetch, RequestParams } from "./fetch";
 import {
   CompletedItemResponse,
   Filter,
@@ -37,7 +37,6 @@ import {
 import { parseResponse } from "src/parser/json";
 import { MarkdownPostProcessorContext, Notice, Vault } from "obsidian";
 import {
-  compareDueDates,
   generateUUID,
   getUpdatedItem,
   parseFile,

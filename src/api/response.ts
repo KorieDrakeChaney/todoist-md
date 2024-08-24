@@ -1,5 +1,11 @@
-import { TodoistColor, TodoistViewStyle } from "./todoist";
-import { DueDate, Priority, TodoistDuration, TodoistReaction } from "./types";
+import type {
+  DueDate,
+  Priority,
+  TodoistDuration,
+  TodoistReaction,
+  TodoistColor,
+  TodoistViewStyle
+} from "./types";
 
 export type TodoistFileAttachment = {
   file_name: string;
