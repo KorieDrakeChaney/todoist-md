@@ -1,6 +1,5 @@
-import { ItemUpdateArgs } from "./arguments";
-import { ItemResponse } from "./response";
-import { DueDate, Priority, Todo, TodoItem } from "./types";
+import type { ItemUpdateArgs } from "./arguments";
+import type { DueDate, Priority, Todo, TodoBody, TodoItem } from "./types";
 import { v4 as uuidv4 } from "uuid";
 
 type TodoParseState =
@@ -604,12 +603,12 @@ const removeHtml = (html: string): string => {
   return content;
 };
 
-export const sortTodos = (body: (string | Todo)[]): (string | Todo)[] => {
+export const sortTodos = (body: TodoBody): TodoBody => {
   return body.sort((a, b) => {
-    if (typeof a === "string") return -1;
-    if (typeof b === "string") return 1;
+    if (typeof a === "string") return 1;
+    if (typeof b === "string") return -1;
 
-    return a.priority - b.priority;
+    return b.priority - a.priority;
   });
 };
 
