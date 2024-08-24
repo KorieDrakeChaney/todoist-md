@@ -316,6 +316,13 @@ export class TodoistAPI {
         let todo = parseTodo(line);
 
         if (todo) {
+          let syncedItem = this.syncedItems[todo.id];
+
+          if (!syncedItem) {
+            syncedItem = this.plugin.settings.completedTodos[todo.id];
+          }
+
+          if (!todo.priority) todo.priority = syncedItem?.priority ?? 1;
           if (buffer) {
             body.push(buffer);
             buffer = "";
