@@ -1,5 +1,9 @@
-import { TodoistColor, TodoistViewStyle } from "./todoist";
-import { DueDate, TodoistDuration } from "./types";
+import type {
+  DueDate,
+  TodoistDuration,
+  TodoistColor,
+  TodoistViewStyle
+} from "./types";
 
 export type ProjectAddArgs = {
   name: string;
