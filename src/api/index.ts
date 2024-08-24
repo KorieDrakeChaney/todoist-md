@@ -318,10 +318,6 @@ export class TodoistAPI {
         if (todo) {
           let syncedItem = this.syncedItems[todo.id];
 
-          if (!syncedItem) {
-            syncedItem = this.plugin.settings.completedTodos[todo.id];
-          }
-
           if (!todo.priority) todo.priority = syncedItem?.priority ?? 1;
           if (buffer) {
             body.push(buffer);
@@ -431,10 +427,6 @@ export class TodoistAPI {
           }
 
           let syncedItem = this.syncedItems[todo.id];
-
-          if (!syncedItem) {
-            syncedItem = this.plugin.settings.completedTodos[todo.id];
-          }
 
           if (!todo.id || !syncedItem || todoDiff[todo.id]) {
             if (!todo.priority) todo.priority = 1;
@@ -653,10 +645,6 @@ export class TodoistAPI {
       todo.id = tempIdMapped ? tempIdMapped : todo.id;
       let syncedTodo = this.syncedItems[todo.id];
 
-      if (!syncedTodo) {
-        syncedTodo = this.plugin.settings.completedTodos[todo.id];
-      }
-
       if (syncedTodo) {
         todo = {
           completed: syncedTodo.completed,
@@ -833,6 +821,11 @@ export class TodoistAPI {
 
       this.plugin.settings.completedTodos[todo.id] = todoItem;
     }
+
+    this.syncedItems = {
+      ...this.syncedItems,
+      ...this.plugin.settings.completedTodos
+    };
 
     await this.plugin.saveSettings();
   }
