@@ -302,8 +302,6 @@ export class TodoistAPI {
     )) {
       if (!(await this.vault.adapter.exists(filePath))) {
         delete this.plugin.settings.registeredFiles[filePath];
-        await this.plugin.saveSettings();
-
         continue;
       }
 
@@ -356,8 +354,6 @@ export class TodoistAPI {
 
       index++;
     }
-
-    await this.plugin.saveSettings();
 
     if (!(await this.vault.adapter.exists(this.directory))) {
       await this.vault.adapter.mkdir(this.directory);
@@ -492,19 +488,21 @@ export class TodoistAPI {
             }
 
             if (shouldComplete(syncedItem, todo)) {
-              if (isPush)
+              if (isPush) {
+                this.plugin.settings.completedTodos[todo.id] = {
+                  ...todo,
+                  project_id: projId
+                };
                 this.itemComplete({
                   id: todo.id
                 });
-              else if (canChange) todo.completed = false;
+              } else if (canChange) todo.completed = false;
             }
 
             if (shouldUncomplete(syncedItem, todo)) {
               if (isPush) {
                 if (this.plugin.settings.completedTodos[todo.id]) {
                   delete this.plugin.settings.completedTodos[todo.id];
-
-                  await this.plugin.saveSettings();
                 }
 
                 this.itemUncomplete({
@@ -571,6 +569,8 @@ export class TodoistAPI {
         }
       }
     }
+
+    await this.plugin.saveSettings();
 
     return projectDiff;
   }
@@ -646,6 +646,10 @@ export class TodoistAPI {
       todo.id = tempIdMapped ? tempIdMapped : todo.id;
       let syncedTodo = this.syncedItems[todo.id];
 
+      if (!syncedTodo) {
+        syncedTodo = this.plugin.settings.completedTodos[todo.id];
+      }
+
       if (syncedTodo) {
         todo = {
           completed: syncedTodo.completed,
@@ -657,7 +661,7 @@ export class TodoistAPI {
         };
       }
 
-      let id = tempIdMapped ? tempIdMapped : this.syncedItems[todo.id]?.id;
+      let id = tempIdMapped ? tempIdMapped : syncedTodo ? syncedTodo.id : null;
       let due = todo.due ? `(@${todo.due.date})` : "";
 
       let labels = todo.labels.length ? `#${todo.labels.join(" #")}` : "";
@@ -820,7 +824,6 @@ export class TodoistAPI {
         project_id: item.project_id
       };
 
-      this.syncedItems[todo.id] = todoItem;
       this.plugin.settings.completedTodos[todo.id] = todoItem;
     }
 
