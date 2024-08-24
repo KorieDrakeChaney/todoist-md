@@ -37,16 +37,16 @@ export default class TodoistMarkdownPlugin extends Plugin {
       }
       createReactModal(this, "TokenValidatorModal").open();
     } else {
-      await this.services.todoistAPI.pull();
+      await this.services.todoistAPI.softPull();
     }
 
     this.setupRibbons();
   }
 
   private setupRibbons() {
-    this.addRibbonIcon("sync", "Sync with Todoist", async () => {
+    this.addRibbonIcon("sync", "Pull from Todoist (Non-Forced)", async () => {
       if (this.settings.token) {
-        await this.services.todoistAPI.pull();
+        await this.services.todoistAPI.softPull();
       } else {
         createReactModal(this, "TokenValidatorModal").open();
       }
@@ -54,7 +54,7 @@ export default class TodoistMarkdownPlugin extends Plugin {
 
     this.addRibbonIcon("step-forward", "Push to Todoist", async () => {
       if (this.settings.token) {
-        await this.services.todoistAPI.push();
+        await this.services.todoistAPI.forcedPush();
       } else {
         createReactModal(this, "TokenValidatorModal").open();
       }

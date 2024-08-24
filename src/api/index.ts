@@ -50,23 +50,6 @@ import {
 } from "./utils";
 import { Priority, Project, Todo, TodoItem } from "./types";
 
-type ResourceTypes =
-  | "projects"
-  | "items"
-  | "lnotes"
-  | "project_notes"
-  | "sections"
-  | "labels"
-  | "filters"
-  | "-projects"
-  | "-items"
-  | "-notes"
-  | "-project_notes"
-  | "-sections"
-  | "-labels"
-  | "-filters"
-  | "all";
-
 type TodoistSyncResponse = {
   sync_token: string;
   projects?: ProjectResponse[];
@@ -88,12 +71,10 @@ type ProjectMap = Record<string, ProjectResponse>;
 
 type ProjectDiffMap = Record<string, Project>;
 
-type FileData = {
-  projName: string;
-  projId: string | null;
-  body: (string | Todo)[];
-  filePath: string;
-}[];
+type DiffOptions = {
+  canChange: boolean;
+  isPush: boolean;
+};
 
 export class TodoistAPI {
   private readonly vault: Vault;
@@ -116,32 +97,42 @@ export class TodoistAPI {
     this.commands = [];
   }
 
-  async pull() {
-    new Notice("Syncing Todoist projects...");
+  private async syncDiff({ isPush, canChange }: DiffOptions) {
+    let diff: ProjectDiffMap;
+
+    new Notice(isPush ? "Pushing to Todoist..." : "Pulling from Todoist...");
+
     try {
-      await this.sync();
-      const diff = await this.getDiff();
+      if (isPush) {
+        diff = await this.getDiff({ isPush, canChange });
+        await this.sync();
+      } else {
+        await this.sync();
+        diff = await this.getDiff({ isPush, canChange });
+      }
+
       await this.writeDiff(diff);
-      new Notice("Todoist projects synced!");
+
+      new Notice(isPush ? "Pushed to Todoist!" : "Pulled from Todoist!");
     } catch (error: unknown) {
       new Notice(error.toString());
     }
-
-    this.clear();
   }
 
-  async push() {
-    new Notice("Pushing to Todoist...");
-    try {
-      const diff = await this.getDiff(true);
-      await this.sync();
-      await this.writeDiff(diff);
-      new Notice("Pushed to Todoist!");
-    } catch (error) {
-      new Notice("Error syncing Todoist projects");
-    }
+  async softPull() {
+    await this.syncDiff({ isPush: false, canChange: false });
+  }
 
-    this.clear();
+  async forcedPull() {
+    await this.syncDiff({ isPush: false, canChange: true });
+  }
+
+  async softPush() {
+    await this.syncDiff({ isPush: true, canChange: false });
+  }
+
+  async forcedPush() {
+    await this.syncDiff({ isPush: true, canChange: true });
   }
 
   async healthCheck(potentialToken?: string): Promise<boolean> {
@@ -297,7 +288,10 @@ export class TodoistAPI {
     }
   }
 
-  private async getDiff(canChange: boolean = false): Promise<ProjectDiffMap> {
+  private async getDiff({
+    isPush,
+    canChange
+  }: DiffOptions): Promise<ProjectDiffMap> {
     const projectDiff: ProjectDiffMap = {};
 
     let syncedRegisteredTodos: Record<string, Todo> = {};
@@ -361,7 +355,7 @@ export class TodoistAPI {
     const syncedProjectsCopy = { ...this.syncedProjects };
     const syncedItemsCopy = { ...this.syncedItems };
 
-    for (const file of files) {
+    for (let file of files) {
       let needsUpdate = false;
       let fileName = parseFile(file);
 
@@ -379,7 +373,7 @@ export class TodoistAPI {
       if (!projId || !syncedProj || projectDiff[file]) {
         projId = generateUUID();
 
-        if (canChange) {
+        if (isPush) {
           this.projectAdd(
             {
               name: name
@@ -387,19 +381,20 @@ export class TodoistAPI {
             projId
           );
           needsUpdate = true;
+        } else if (canChange) {
+          await this.vault.adapter.remove(file);
+          continue;
         }
       } else {
         if (syncedProj.name !== name) {
-          if (canChange) {
+          if (isPush) {
             this.projectUpdate({
               id: projId,
               name: name
             });
-          } else {
-            name = syncedProj.name;
+          } else if (canChange) {
+            needsUpdate = true;
           }
-
-          needsUpdate = true;
         }
 
         delete syncedProjectsCopy[projId];
@@ -429,7 +424,7 @@ export class TodoistAPI {
             if (!todo.priority) todo.priority = 1;
             todo.id = generateUUID();
 
-            if (canChange)
+            if (isPush)
               this.itemAdd(
                 {
                   project_id: projId,
@@ -440,6 +435,9 @@ export class TodoistAPI {
                 },
                 todo.id
               );
+            else if (canChange) {
+              continue;
+            }
           } else {
             if (!todo.priority) todo.priority = syncedItem.priority;
             let syncedRegisteredTodo = syncedRegisteredTodos[todo.id];
@@ -470,9 +468,9 @@ export class TodoistAPI {
               update.priority ||
               update.labels
             ) {
-              if (canChange) {
+              if (isPush) {
                 this.itemUpdate(update);
-              } else {
+              } else if (canChange) {
                 todo.content = syncedItem.content;
                 todo.due = syncedItem.due;
                 todo.priority = syncedItem.priority;
@@ -481,15 +479,15 @@ export class TodoistAPI {
             }
 
             if (shouldComplete(syncedItem, todo)) {
-              if (canChange)
+              if (isPush)
                 this.itemComplete({
                   id: todo.id
                 });
-              else todo.completed = false;
+              else if (canChange) todo.completed = false;
             }
 
             if (shouldUncomplete(syncedItem, todo)) {
-              if (canChange) {
+              if (isPush) {
                 if (this.plugin.settings.completedTodos[todo.id]) {
                   delete this.plugin.settings.completedTodos[todo.id];
 
@@ -499,7 +497,7 @@ export class TodoistAPI {
                 this.itemUncomplete({
                   id: todo.id
                 });
-              } else todo.completed = true;
+              } else if (canChange) todo.completed = true;
             }
 
             delete syncedItemsCopy[todo.id];
@@ -526,7 +524,7 @@ export class TodoistAPI {
     }
 
     for (const [projId, project] of Object.entries(syncedProjectsCopy)) {
-      if (canChange) {
+      if (isPush && canChange) {
         this.projectDelete({
           id: projId
         });
@@ -541,7 +539,7 @@ export class TodoistAPI {
     }
 
     for (const [itemId, item] of Object.entries(syncedItemsCopy)) {
-      if (canChange) {
+      if (isPush && canChange) {
         this.itemDelete({
           id: itemId
         });
@@ -574,14 +572,20 @@ export class TodoistAPI {
         projId = tempIdMapped;
       }
 
-      if (tempIdMapped || this.syncedProjects[projId]) {
-        projPath = this.getFilePath({
-          name: project.name,
-          id: projId
-        });
+      let syncedProject = this.syncedProjects[projId];
 
+      if (tempIdMapped || syncedProject) {
         if (project.needsUpdate) {
+          projPath = this.getFilePath({
+            name: syncedProject.name,
+            id: projId
+          });
           await this.vault.adapter.rename(project.filePath, projPath);
+        } else {
+          projPath = this.getFilePath({
+            name: project.name,
+            id: projId
+          });
         }
       }
 

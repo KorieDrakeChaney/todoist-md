@@ -4,19 +4,36 @@ import { parseResponse } from "./parser/json";
 import { ProjectResponse } from "./api/response";
 
 const commands = {
-  "todoist-push": {
-    name: "Push Todoist",
+  "todoist-soft-pull": {
+    name: "Soft-Pull",
     callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
       if (await plugin.services.todoistAPI.healthCheck()) {
-        await plugin.services.todoistAPI.push();
+        await plugin.services.todoistAPI.softPull();
       }
     }
   },
-  "todoist-pull": {
-    name: "Pull Todoist",
+  "todoist-forced-pull": {
+    name: "Forced-Pull",
     callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
       if (await plugin.services.todoistAPI.healthCheck()) {
-        await plugin.services.todoistAPI.pull();
+        await plugin.services.todoistAPI.forcedPull();
+      }
+    }
+  },
+  "todoist-soft-push": {
+    name: "Soft-Push",
+    callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
+      if (await plugin.services.todoistAPI.healthCheck()) {
+        await plugin.services.todoistAPI.softPush();
+      }
+    }
+  },
+
+  "todoist-forced-push": {
+    name: "Forced-Push",
+    callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
+      if (await plugin.services.todoistAPI.healthCheck()) {
+        await plugin.services.todoistAPI.forcedPush();
       }
     }
   }
