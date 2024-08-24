@@ -117,6 +117,8 @@ export class TodoistAPI {
     } catch (error: unknown) {
       new Notice(error.toString());
     }
+
+    this.clear();
   }
 
   async softPull() {
