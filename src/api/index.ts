@@ -339,6 +339,10 @@ export class TodoistAPI {
         delete todos[todoId];
       }
 
+      if (Object.keys(todos).length === 0) {
+        delete this.plugin.settings.registeredFiles[filePath];
+      }
+
       if (buffer) {
         body.push(buffer);
       }
