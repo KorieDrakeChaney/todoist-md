@@ -304,7 +304,8 @@ export class TodoistAPI {
       {
         showColor: this.plugin.settings.showColor,
         showDescription: this.plugin.settings.showDescription,
-        sortTodos: this.plugin.settings.sortTodos
+        sortTodos: this.plugin.settings.sortTodos,
+        priorityColor: this.plugin.settings.priorityColor
       }
     );
 
@@ -373,10 +374,6 @@ export class TodoistAPI {
         } else {
           if (line.length == 0) {
             if (currentTodo) {
-              if (line.length > 0) {
-                currentTodo.description = line.replaceAll("`", "");
-                buffer = "";
-              }
               pushCurrentTodo();
             }
 
@@ -501,8 +498,11 @@ export class TodoistAPI {
             { isPush, canChange },
             syncedRegisteredTodos[currentTodo.id]
           )
-        )
+        ) {
+          console.log(currentTodo);
+          console.log("here");
           hasUpdates = true;
+        }
 
         if (
           !isPush &&
@@ -543,14 +543,7 @@ export class TodoistAPI {
           }
         } else {
           if (line.length == 0) {
-            if (currentTodo) {
-              if (line.length > 0) {
-                currentTodo.description = line.replaceAll("`", "");
-                buffer = "";
-              }
-              pushCurrentTodo();
-            }
-
+            if (currentTodo) pushCurrentTodo();
             continue;
           }
           buffer += line + "\n";
@@ -568,7 +561,7 @@ export class TodoistAPI {
         body: body,
         filePath: file.path,
         needsRename,
-        hasUpdates
+        hasUpdates: forcedUpdate || hasUpdates
       };
     }
 
@@ -664,7 +657,13 @@ export class TodoistAPI {
     this.plugin.settings.previousEditorSettings = {
       showColor: this.plugin.settings.showColor,
       showDescription: this.plugin.settings.showDescription,
-      sortTodos: this.plugin.settings.sortTodos
+      sortTodos: this.plugin.settings.sortTodos,
+      priorityColor: {
+        1: this.plugin.settings.priorityColor[1],
+        2: this.plugin.settings.priorityColor[2],
+        3: this.plugin.settings.priorityColor[3],
+        4: this.plugin.settings.priorityColor[4]
+      }
     };
 
     await this.plugin.saveSettings();
@@ -788,6 +787,7 @@ export class TodoistAPI {
     let currentTodo: Todo | null = null;
 
     let pushTodo = (todo: Todo) => {
+      console.log(currentProjId);
       this.itemAdd(
         {
           project_id: currentProjId,
@@ -817,13 +817,36 @@ export class TodoistAPI {
       } else {
         if (line.length > 0) {
           if (line.startsWith("@")) {
+            if (currentTodo) pushTodo(currentTodo);
+
             let potentialProj = line.slice(1);
             let projId = this.projectNameToIdMap[potentialProj];
             if (projId) {
+              console.log(projId);
               currentProjId = projId;
+            } else {
+              let found = false;
+              for (let [name, id] of Object.entries(this.projectNameToIdMap)) {
+                if (name.toLowerCase().includes(potentialProj.toLowerCase())) {
+                  currentProjId = id;
+                  found = true;
+                  break;
+                }
+              }
+              if (!found) {
+                currentProjId = generateUUID();
+                this.projectAdd(
+                  {
+                    name: potentialProj
+                  },
+                  currentProjId
+                );
+              }
             }
+
             continue;
           }
+
           if (line.startsWith(":")) {
             if (currentTodo) {
               currentTodo.description = line.slice(1);
@@ -916,7 +939,8 @@ export class TodoistAPI {
       if (!todo.priority) todo.priority = 1;
       todo.id = generateUUID();
 
-      if (isPush)
+      if (isPush) {
+        didUpdate = true;
         this.itemAdd(
           {
             project_id: projId,
@@ -927,6 +951,7 @@ export class TodoistAPI {
           },
           todo.id
         );
+      }
     } else {
       if (!todo.priority) {
         didUpdate = true;

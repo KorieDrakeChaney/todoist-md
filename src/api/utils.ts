@@ -332,6 +332,10 @@ const getDueDate = (date: string): DueDate | null => {
       dateObj = new Date();
       dateObj.setDate(dateObj.getDate() + 1);
       break;
+    case "next week":
+      dateObj = new Date();
+      dateObj.setDate(dateObj.getDate() + 7);
+      break;
     case "monday":
     case "tuesday":
     case "wednesday":
@@ -540,7 +544,9 @@ export const compareObjects = <T extends object>(a: T, b: T): boolean => {
   if (Object.keys(a).length !== Object.keys(b).length) return false;
 
   for (let key in a) {
-    if (a[key] !== b[key]) return false;
+    if (typeof a[key] === "object" && typeof b[key] === "object") {
+      if (!compareObjects(a[key], b[key])) return false;
+    } else if (a[key] !== b[key]) return false;
   }
 
   return true;

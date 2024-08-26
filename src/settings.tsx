@@ -7,7 +7,7 @@ type EditorSettings = {
   showDescription: boolean;
   showColor: boolean;
   sortTodos: boolean;
-};
+} & MiscellaneousSettings;
 
 type GeneralSettings = {
   directory: string;
@@ -38,6 +38,13 @@ export type TodoistMarkdownSettings = EditorSettings &
   AppSettings &
   ChangeLog;
 
+const DEFAULT_PRIORITY_COLOR = {
+  1: "#db4035",
+  2: "#fad000",
+  3: "#14aaf5",
+  4: "#ffffff"
+};
+
 export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
   previousProjects: {},
   showDescription: true,
@@ -48,16 +55,12 @@ export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
   directory: "todos",
   showColor: true,
   sortTodos: false,
-  priorityColor: {
-    1: "#db4035",
-    2: "#fad000",
-    3: "#14aaf5",
-    4: "#ffffff"
-  },
+  priorityColor: DEFAULT_PRIORITY_COLOR,
   previousEditorSettings: {
     showDescription: true,
     showColor: true,
-    sortTodos: false
+    sortTodos: false,
+    priorityColor: DEFAULT_PRIORITY_COLOR
   },
   fileLastModifiedTime: {}
 };
