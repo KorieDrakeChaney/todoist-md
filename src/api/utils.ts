@@ -2,6 +2,74 @@ import type { ItemUpdateArgs } from "./arguments";
 import type { DueDate, Priority, Todo, TodoBody, TodoItem } from "./types";
 import { v4 as uuidv4 } from "uuid";
 
+type IdParseState =
+  | "BEFORE_ID"
+  | "ID"
+  | "AFTER_ID"
+  | "LESS_THAN"
+  | "EXCLAMATION"
+  | "DASH"
+  | "ID_END";
+
+const parseId = (line: string): { body: string; id: string } => {
+  let body = "";
+  let id = "";
+  let cursor = 0;
+  let state: IdParseState = "BEFORE_ID";
+  while (cursor < line.length) {
+    switch (state) {
+      case "BEFORE_ID":
+        if (line[cursor] === "<") {
+          state = "LESS_THAN";
+        } else {
+          body += line[cursor];
+        }
+        break;
+      case "LESS_THAN":
+        if (line[cursor] === "!") {
+          state = "EXCLAMATION";
+        } else {
+          state = "BEFORE_ID";
+          body += "<";
+        }
+        break;
+      case "EXCLAMATION":
+        if (line[cursor] === "-") {
+          state = "DASH";
+        } else {
+          state = "BEFORE_ID";
+          body += "<!";
+        }
+        break;
+      case "DASH":
+        if (line[cursor] === "-") {
+          state = "ID";
+        } else {
+          state = "BEFORE_ID";
+          body += "<!-";
+        }
+        break;
+      case "ID":
+        if (line[cursor] === "-") {
+          state = "ID_END";
+        } else {
+          id += line[cursor];
+        }
+        break;
+      case "ID_END":
+        if (line[cursor] === ">") {
+          state = "AFTER_ID";
+        } else {
+          return { body: line, id: id };
+        }
+        break;
+    }
+    cursor++;
+  }
+
+  return { body, id };
+};
+
 type TodoParseState =
   | "BEFORE_COMPLETED"
   | "COMPLETED_SPACE"
@@ -15,10 +83,6 @@ type TodoParseState =
   | "PRIORITY"
   | "AFTER_PRIORITY"
   | "SPACE"
-  | "BEFORE_ID"
-  | "SINGLE_HYPHEN"
-  | "DOUBLE_HYPHEN"
-  | "ID"
   | "LABEL"
   | "END";
 
@@ -29,37 +93,37 @@ export const parseTodo = (
   if (line.length === 0) {
     return null;
   }
+  let { body, id } = parseId(line);
 
-  line = removeHtml(line);
+  body = removeHtml(body);
 
   let state: TodoParseState = "BEFORE_COMPLETED";
 
   let cursor = 0;
 
   let completed = false;
-  let content = "";
   let due: DueDate;
-  let id = "";
+  let content = "";
   let potentialDue = "";
   let priority: Priority;
   let labels: string[] = [];
 
   let buffer = "";
   while (true) {
-    if (cursor >= line.length) {
+    if (cursor >= body.length) {
       break;
     }
 
     switch (state) {
       case "BEFORE_COMPLETED":
-        if (cursor == 0 && line[cursor] == "-") {
+        if (cursor == 0 && body[cursor] == "-") {
           state = "COMPLETED_SPACE";
         } else {
           return null;
         }
         break;
       case "COMPLETED_SPACE":
-        if (line[cursor] == " ") {
+        if (body[cursor] == " ") {
           if (isCodeBlock) state = "CONTENT";
           else state = "LEFT_BRACKET";
         } else {
@@ -67,14 +131,14 @@ export const parseTodo = (
         }
         break;
       case "LEFT_BRACKET":
-        if (line[cursor] == "[") {
+        if (body[cursor] == "[") {
           state = "COMPLETED_CHECK";
         } else {
           return null;
         }
         break;
       case "COMPLETED_CHECK":
-        switch (line[cursor]) {
+        switch (body[cursor]) {
           case "x":
             completed = true;
             state = "RIGHT_BRACKET";
@@ -87,21 +151,21 @@ export const parseTodo = (
         }
         break;
       case "RIGHT_BRACKET":
-        if (line[cursor] == "]") {
+        if (body[cursor] == "]") {
           state = "BEFORE_CONTENT";
         } else {
           return null;
         }
         break;
       case "BEFORE_CONTENT":
-        if (line[cursor] == " ") {
+        if (body[cursor] == " ") {
           state = "CONTENT";
         } else {
           return null;
         }
         break;
       case "CONTENT":
-        switch (line[cursor]) {
+        switch (body[cursor]) {
           case " ":
             buffer = " ";
             state = "SPACE";
@@ -110,27 +174,20 @@ export const parseTodo = (
             buffer = "(";
             state = "LEFT_PARENTHESES";
             break;
-          case "<":
-            buffer = "<";
-            state = "BEFORE_ID";
-            break;
           case "#":
             state = "LABEL";
+            buffer = "";
             break;
           default:
-            content += line[cursor];
+            content += body[cursor];
             break;
         }
         break;
       case "SPACE":
-        switch (line[cursor]) {
+        switch (body[cursor]) {
           case "(":
             buffer += "(";
             state = "LEFT_PARENTHESES";
-            break;
-          case "<":
-            buffer += "<";
-            state = "BEFORE_ID";
             break;
           case "#":
             state = "LABEL";
@@ -143,7 +200,7 @@ export const parseTodo = (
         }
         break;
       case "LEFT_PARENTHESES":
-        switch (line[cursor]) {
+        switch (body[cursor]) {
           case "p":
             buffer += "p";
             state = "PRIORITY";
@@ -160,10 +217,10 @@ export const parseTodo = (
         break;
       case "LABEL":
         if (
-          (line[cursor] >= "a" && line[cursor] <= "z") ||
-          (line[cursor] >= "A" && line[cursor] <= "Z")
+          (body[cursor] >= "a" && body[cursor] <= "z") ||
+          (body[cursor] >= "A" && body[cursor] <= "Z")
         ) {
-          buffer += line[cursor];
+          buffer += body[cursor];
         } else {
           if (buffer.length > 0) {
             labels.push(buffer);
@@ -175,26 +232,31 @@ export const parseTodo = (
         }
         break;
       case "PRIORITY":
-        state = "AFTER_PRIORITY";
-        if (line.charAt(cursor) >= "1" && line.charAt(cursor) <= "4") {
-          priority = (5 - parseInt(line[cursor])) as Priority;
-          buffer += line[cursor];
+        let char = body[cursor];
+        if (char >= "1" && char <= "4") {
+          state = "AFTER_PRIORITY";
+          if (cursor + 1 < body.length && body[cursor + 1] === ")") {
+            priority = (5 - parseInt(char)) as Priority;
+          } else {
+            buffer += char;
+          }
         } else {
+          state = "CONTENT";
           content += buffer;
           cursor--;
         }
         break;
       case "AFTER_PRIORITY":
-        if (line[cursor] == ")") {
+        if (body[cursor] == ")") {
           state = "CONTENT";
         } else {
-          priority = undefined;
+          state = "CONTENT";
           content += buffer;
           cursor--;
         }
         break;
       case "DUE_DATE":
-        if (line[cursor] == ")") {
+        if (body[cursor] == ")") {
           due = getDueDate(potentialDue);
           potentialDue = "";
           buffer = "";
@@ -205,57 +267,10 @@ export const parseTodo = (
 
           state = "CONTENT";
         } else {
-          potentialDue += line[cursor];
-          buffer += line[cursor];
+          potentialDue += body[cursor];
+          buffer += body[cursor];
         }
         break;
-      case "BEFORE_ID":
-        if (line[cursor] == "!") {
-          state = "SINGLE_HYPHEN";
-          buffer += "!";
-        } else {
-          state = "CONTENT";
-          content += buffer;
-          cursor--;
-        }
-        break;
-      case "SINGLE_HYPHEN":
-        if (line[cursor] == "-") {
-          state = "DOUBLE_HYPHEN";
-          buffer += "-";
-        } else {
-          state = "CONTENT";
-          content += buffer;
-          cursor--;
-        }
-        break;
-      case "DOUBLE_HYPHEN":
-        if (line[cursor] == "-") {
-          state = "ID";
-          buffer += "-";
-        } else {
-          state = "CONTENT";
-          content += buffer;
-          cursor--;
-        }
-        break;
-      case "ID":
-        const charCode = line.charCodeAt(cursor);
-        if (line[cursor] == "-") {
-          state = "END";
-        } else if (charCode >= 48 && charCode <= 57) {
-          id += line[cursor];
-        }
-        break;
-      case "END":
-        return {
-          id: id,
-          content: content.trimEnd().trimStart(),
-          completed,
-          due: due,
-          priority,
-          labels
-        };
     }
 
     cursor++;
@@ -272,20 +287,16 @@ export const parseTodo = (
         due = getDueDate(potentialDue);
       }
       break;
-    case "ID":
-      if (id.length > 0) {
-        id = id;
-      }
-      break;
   }
 
   return {
-    id: id.length > 0 ? id : null,
-    content: content.trimEnd().trimStart(),
+    id: id?.length > 0 ? id : null,
+    content: content.trim(),
     completed,
     due: due,
     priority,
-    labels
+    labels,
+    description: ""
   };
 };
 
@@ -294,83 +305,16 @@ export type ProjectName = {
   id: string | null;
 };
 
-type ProjectParseState =
-  | "NAME"
-  | "BEFORE_NAME"
-  | "ID"
-  | "BEFORE_ID"
-  | "BEFORE_HYPHEN"
-  | "EXTENSION";
+export const parseBaseName = (baseName: string): ProjectName => {
+  let match = baseName.match(/^(?<name>.*?) - (?<id>\d+)?/);
 
-export const parseFile = (fileName: string): ProjectName => {
-  let id = "";
-  let name = "";
-  let cursor = 0;
-
-  let state: ProjectParseState = "NAME";
-
-  while (true) {
-    if (cursor >= fileName.length) {
-      break;
-    }
-
-    switch (state) {
-      case "NAME":
-        switch (fileName[cursor]) {
-          case ".":
-            state = "EXTENSION";
-            break;
-          case " ":
-            state = "BEFORE_HYPHEN";
-            break;
-          default:
-            name += fileName[cursor];
-            break;
-        }
-        break;
-      case "BEFORE_HYPHEN":
-        if (fileName[cursor] == "-") {
-          state = "BEFORE_ID";
-        } else {
-          name += " " + fileName[cursor];
-          state = "NAME";
-        }
-        break;
-      case "BEFORE_ID":
-        if (fileName[cursor] == " ") {
-          state = "ID";
-        } else {
-          name += " -" + fileName[cursor];
-        }
-        break;
-      case "EXTENSION":
-        break;
-      case "ID":
-        switch (fileName[cursor]) {
-          case ".":
-            state = "EXTENSION";
-            break;
-          default:
-            id += fileName[cursor];
-            break;
-        }
-        break;
-    }
-
-    cursor++;
+  if (!match || !match.groups) {
+    return { name: baseName, id: null };
   }
 
-  if (id.length > 0) {
-    if (isNaN(parseInt(id))) {
-      name += " - " + id;
-      id = "";
-    }
-  }
+  let { name, id } = match.groups;
 
-  return {
-    id: id.length > 0 ? id : null,
-    name: name.split("/").pop()
-  };
+  return { name, id };
 };
 
 export const generateUUID = (): string => {
@@ -485,6 +429,8 @@ export const getUpdatedItem = (a: TodoItem, b: Todo): ItemUpdateArgs => {
 
   if (!arraysEqualUnordered(a.labels, b.labels)) update.labels = b.labels;
 
+  if (a.description !== b.description) update.description = b.description;
+
   return update;
 };
 
@@ -518,91 +464,10 @@ export const shouldUncomplete = (syncedItem: TodoItem, item: Todo): boolean => {
   return syncedItem.completed && !item.completed;
 };
 
-type HtmlParseState =
-  | "DATA"
-  | "TAG_NAME"
-  | "AFTER_NAME"
-  | "END_TAG_NAME"
-  | "SELF_CLOSING";
-
-//@todo edge cases of '<' and '>' in content
-const removeHtml = (html: string): string => {
-  let state: HtmlParseState = "DATA";
-  let cursor = 0;
-  let content = "";
-  let currentTag = "";
-  let buffer = "";
-  while (cursor < html.length) {
-    switch (state) {
-      case "DATA":
-        if (html[cursor] === "<") {
-          state = "TAG_NAME";
-        } else {
-          content += html[cursor];
-        }
-        break;
-      case "TAG_NAME":
-        switch (html[cursor]) {
-          case "/":
-            if (buffer.length > 0) {
-              state = "SELF_CLOSING";
-            } else {
-              state = "END_TAG_NAME";
-            }
-            break;
-          case ">":
-            if (buffer.length > 0) {
-              currentTag = buffer;
-              buffer = "";
-            } else {
-              content += "<>";
-            }
-            state = "DATA";
-            break;
-          case "!":
-            state = "DATA";
-            content += "<!";
-            break;
-          case " ":
-            if (buffer.length > 0) {
-              currentTag = buffer;
-              buffer = "";
-            }
-            state = "AFTER_NAME";
-            break;
-          default:
-            buffer += html[cursor];
-            break;
-        }
-        break;
-      case "AFTER_NAME":
-        if (html[cursor] === ">") {
-          state = "DATA";
-        }
-        break;
-      case "SELF_CLOSING":
-        if (html[cursor] === ">") {
-          state = "DATA";
-        }
-        break;
-      case "END_TAG_NAME":
-        if (html[cursor] === ">") {
-          if (buffer === currentTag) {
-            buffer = "";
-            currentTag = "";
-          } else {
-            content += "</" + buffer + ">";
-          }
-          state = "DATA";
-        } else {
-          buffer += html[cursor];
-        }
-        break;
-    }
-    cursor++;
-  }
-
-  return content;
+export const removeHtml = (html: string): string => {
+  let el = document.createElement("html");
+  el.innerHTML = html;
+  return el.textContent || "";
 };
 
 export const sortTodos = (body: TodoBody): TodoBody => {
@@ -669,4 +534,14 @@ export const ignoreCodeBlock = (body: string): string => {
   }
 
   return content;
+};
+
+export const compareObjects = <T extends object>(a: T, b: T): boolean => {
+  if (Object.keys(a).length !== Object.keys(b).length) return false;
+
+  for (let key in a) {
+    if (a[key] !== b[key]) return false;
+  }
+
+  return true;
 };

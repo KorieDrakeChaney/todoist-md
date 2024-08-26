@@ -1,38 +1,65 @@
-import { Notice, PluginSettingTab, Setting } from "obsidian";
+import { PluginSettingTab, Setting } from "obsidian";
 import type TodoistMarkdownPlugin from "./main";
 import { createReactModal } from "./ui/modal";
-import { createRoot, Root } from "react-dom/client";
-import type { TodoItem, Todo } from "./api/types";
+import type { TodoItem, Priority } from "./api/types";
 
-export type TodoistMarkdownSettings = {
-  registeredFiles: Record<string, Record<string, Todo>>;
-  completedTodos: Record<string, TodoItem>;
-  token: string | undefined;
-  autoRefresh: boolean;
-  autoRefreshInterval: number;
-  directory: string;
-  allowColor: boolean;
+type EditorSettings = {
+  showDescription: boolean;
+  showColor: boolean;
   sortTodos: boolean;
+};
+
+type GeneralSettings = {
+  directory: string;
+};
+
+type MiscellaneousSettings = {
   priorityColor: {
     [key: number]: string;
   };
 };
 
+type AppSettings = {
+  token: string | undefined;
+  registeredFiles: Record<string, Record<string, boolean>>;
+  completedTodos: Record<string, TodoItem>;
+  priorityMap: Record<string, Priority>;
+};
+
+export type ChangeLog = {
+  previousEditorSettings: EditorSettings;
+  previousProjects: Record<string, string[]>;
+  fileLastModifiedTime: Record<string, number>;
+};
+
+export type TodoistMarkdownSettings = EditorSettings &
+  GeneralSettings &
+  MiscellaneousSettings &
+  AppSettings &
+  ChangeLog;
+
 export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
+  previousProjects: {},
+  showDescription: true,
+  priorityMap: {},
   registeredFiles: {},
   completedTodos: {},
   token: undefined,
-  autoRefresh: false,
-  autoRefreshInterval: 0,
   directory: "todos",
-  allowColor: true,
+  showColor: true,
   sortTodos: false,
   priorityColor: {
     1: "#db4035",
     2: "#fad000",
     3: "#14aaf5",
     4: "#ffffff"
-  }
+  },
+  previousEditorSettings: {
+    showDescription: true,
+    showColor: true,
+    sortTodos: false
+  },
+  fileLastModifiedTime: {}
 };
 
 export class TodoistMarkdownSettingTab extends PluginSettingTab {
@@ -93,15 +120,25 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
     this.createGroup("Editor");
 
     new Setting(containerEl)
-      .setName("Enable Color")
-      .setDesc(
-        "Enable color in the editor for tasks depending on their priority"
-      )
+      .setName("Show Color")
+      .setDesc("Show the color of the task based on the priority in the editor")
       .addToggle((toggle) =>
         toggle
-          .setValue(this.plugin.settings.allowColor)
+          .setValue(this.plugin.settings.showColor)
           .onChange(async (value) => {
-            this.plugin.settings.allowColor = value;
+            this.plugin.settings.showColor = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Show Description")
+      .setDesc("Show the description of the task in the editor")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.showDescription)
+          .onChange(async (value) => {
+            this.plugin.settings.showDescription = value;
             await this.plugin.saveSettings();
           })
       );

@@ -5,6 +5,7 @@ export type Todo = {
   due?: DueDate;
   priority?: Priority;
   labels: string[];
+  description: string;
 };
 
 export type TodoItem = {
@@ -15,13 +16,15 @@ export type TodoItem = {
   priority?: Priority;
   labels: string[];
   project_id: string;
+  description: string;
 };
 
 export type Project = {
   name: string;
   body: (string | Todo)[];
   filePath: string;
-  needsUpdate: boolean;
+  hasUpdates: boolean;
+  needsRename: boolean;
 };
 
 export type DueDate = {

@@ -22,9 +22,13 @@ export default class TodoistMarkdownPlugin extends Plugin {
   }
 
   async onload() {
+    let called = false;
     this.registerMarkdownCodeBlockProcessor(
       "todomd",
       async (source, el, ctx) => {
+        if (called) {
+          return;
+        }
         let activeView = this.app.workspace.getActiveViewOfType(TextFileView);
 
         if (activeView) {
@@ -38,11 +42,13 @@ export default class TodoistMarkdownPlugin extends Plugin {
             let { lineEnd } = sectionInfo;
 
             if (from.line > lineEnd) {
+              called = true;
               await this.services.todoistAPI.pushCodeBlock(
                 source,
                 sectionInfo,
                 sourcePath
               );
+              called = false;
             }
           }
         }

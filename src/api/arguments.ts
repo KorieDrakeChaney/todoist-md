@@ -2,7 +2,8 @@ import type {
   DueDate,
   TodoistDuration,
   TodoistColor,
-  TodoistViewStyle
+  TodoistViewStyle,
+  Priority
 } from "./types";
 
 export type ProjectAddArgs = {
@@ -50,7 +51,7 @@ export type ItemUpdateArgs = {
   content?: string;
   description?: string;
   due?: DueDate;
-  priority?: number;
+  priority?: Priority;
   collapsed?: number;
   labels?: string[];
   assigned_by_uid?: string;

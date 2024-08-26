@@ -39,15 +39,17 @@ import { MarkdownSectionInformation, Notice, Vault } from "obsidian";
 import {
   generateUUID,
   getUpdatedItem,
-  parseFile,
+  parseBaseName,
   parseTodo,
   shouldComplete,
   shouldUncomplete,
   sortTodos,
   insertTextAtPosition,
-  ignoreCodeBlock
+  ignoreCodeBlock,
+  compareObjects
 } from "./utils";
 import { Priority, Project, Todo, TodoBody, TodoItem } from "./types";
+import { ChangeLog } from "src/settings";
 
 type TodoistSyncResponse = {
   sync_token: string;
@@ -284,7 +286,8 @@ export class TodoistAPI {
         priority: item.priority,
         labels: item.labels,
         completed: !!item.completed_at,
-        project_id: item.project_id
+        project_id: item.project_id,
+        description: item.description
       };
     }
   }
@@ -294,14 +297,36 @@ export class TodoistAPI {
     canChange
   }: DiffOptions): Promise<ProjectDiffMap> {
     const projectDiff: ProjectDiffMap = {};
-
     let syncedRegisteredTodos: Record<string, Todo> = {};
+
+    let forcedUpdate = !compareObjects(
+      this.plugin.settings.previousEditorSettings,
+      {
+        showColor: this.plugin.settings.showColor,
+        showDescription: this.plugin.settings.showDescription,
+        sortTodos: this.plugin.settings.sortTodos
+      }
+    );
+
+    let projectsThatAreForced: Record<string, boolean> = {};
+
     let index = 0;
     for (const [filePath, todos] of Object.entries(
       this.plugin.settings.registeredFiles
     )) {
-      if (!(await this.vault.adapter.exists(filePath))) {
+      let file = this.vault.getFileByPath(filePath);
+
+      if (!file) {
         delete this.plugin.settings.registeredFiles[filePath];
+        continue;
+      }
+
+      if (
+        isPush &&
+        this.plugin.settings.fileLastModifiedTime[filePath] ===
+          file.stat.mtime &&
+        !forcedUpdate
+      ) {
         continue;
       }
 
@@ -311,29 +336,60 @@ export class TodoistAPI {
       let lines = content.split("\n");
       let body: TodoBody = [];
       let buffer = "";
+      let currentTodo: Todo | null = null;
+
+      let pushCurrentTodo = () => {
+        if (buffer.length > 0) {
+          currentTodo.description = buffer.replaceAll("`", "").trim();
+          buffer = "";
+        }
+
+        syncedRegisteredTodos[currentTodo.id] = currentTodo;
+        projectsThatAreForced[this.syncedItems[currentTodo.id].project_id] =
+          true;
+        body.push(currentTodo);
+        delete todoCopy[currentTodo.id];
+        currentTodo = null;
+      };
 
       for (let line of lines) {
+        line = line.trim();
         let todo = parseTodo(line);
 
         if (todo) {
-          let syncedItem = this.syncedItems[todo.id];
+          if (!todo.priority)
+            todo.priority = this.plugin.settings.priorityMap[todo.id];
 
-          if (!todo.priority) todo.priority = syncedItem?.priority ?? 1;
-          if (buffer) {
-            body.push(buffer);
-            buffer = "";
-          }
           if (todos[todo.id]) {
-            todos[todo.id] = todo;
-            syncedRegisteredTodos[todo.id] = todo;
-            body.push(todo);
-            delete todoCopy[todo.id];
+            if (currentTodo) pushCurrentTodo();
+            else if (buffer) {
+              body.push(buffer);
+              buffer = "";
+            }
+            currentTodo = todo;
           } else {
-            buffer += line + "\n";
+            body.push(line + "\n");
           }
         } else {
+          if (line.length == 0) {
+            if (currentTodo) {
+              if (line.length > 0) {
+                currentTodo.description = line.replaceAll("`", "");
+                buffer = "";
+              }
+              pushCurrentTodo();
+            }
+
+            continue;
+          }
           buffer += line + "\n";
         }
+      }
+
+      if (currentTodo) {
+        pushCurrentTodo();
+      } else if (buffer.length > 0) {
+        body.push(buffer);
       }
 
       for (const [todoId, _] of Object.entries(todoCopy)) {
@@ -344,15 +400,12 @@ export class TodoistAPI {
         delete this.plugin.settings.registeredFiles[filePath];
       }
 
-      if (buffer) {
-        body.push(buffer);
-      }
-
       projectDiff[index] = {
         name: "Inbox",
         body: body,
         filePath: filePath,
-        needsUpdate: false
+        needsRename: false,
+        hasUpdates: true
       };
 
       index++;
@@ -362,27 +415,41 @@ export class TodoistAPI {
       await this.vault.adapter.mkdir(this.directory);
     }
 
-    const { files } = await this.vault.adapter.list(this.directory);
+    const files = this.vault.getMarkdownFiles();
 
     const syncedProjectsCopy = { ...this.syncedProjects };
     const syncedItemsCopy = { ...this.syncedItems };
 
     for (let file of files) {
-      let needsUpdate = false;
-      let fileName = parseFile(file);
+      if (!(file.extension === "md") || !file.path.startsWith(this.directory))
+        continue;
 
-      let { name, id: projId } = fileName;
+      let hasUpdates = false;
+      let needsRename = false;
 
-      let content: string;
-      if (!(await this.vault.adapter.exists(file))) {
-        content = "";
-      } else {
-        content = await this.vault.adapter.read(file);
-      }
+      let { name, id: projId } = parseBaseName(file.basename);
 
+      let content = await this.vault.adapter.read(file.path);
       let syncedProj = this.syncedProjects[projId];
 
-      if (!projId || !syncedProj || projectDiff[file]) {
+      if (
+        isPush &&
+        this.plugin.settings.fileLastModifiedTime[file.path] ===
+          file.stat.mtime &&
+        !forcedUpdate &&
+        !projectsThatAreForced[projId]
+      ) {
+        if (syncedProj) {
+          for (let id of this.plugin.settings.previousProjects[projId]) {
+            delete syncedItemsCopy[id];
+          }
+          delete syncedProjectsCopy[projId];
+        }
+        continue;
+      }
+
+      if (!projId || !syncedProj || projectDiff[file.path]) {
+        hasUpdates = true;
         projId = generateUUID();
 
         if (isPush) {
@@ -392,20 +459,21 @@ export class TodoistAPI {
             },
             projId
           );
-          needsUpdate = true;
+          needsRename = true;
         } else if (canChange) {
-          await this.vault.adapter.remove(file);
+          await this.vault.adapter.remove(file.path);
           continue;
         }
       } else {
         if (syncedProj.name !== name) {
+          hasUpdates = true;
           if (isPush) {
             this.projectUpdate({
               id: projId,
               name: name
             });
           } else if (canChange) {
-            needsUpdate = true;
+            needsRename = true;
           }
         }
 
@@ -417,119 +485,90 @@ export class TodoistAPI {
 
       let buffer: string = "";
       let todoDiff: Record<string, boolean> = {};
+      let currentTodo: Todo | null = null;
+
+      const pushCurrentTodo = () => {
+        if (buffer.length > 0) {
+          currentTodo.description = buffer.replaceAll("`", "").trim();
+          buffer = "";
+        }
+
+        if (
+          this.getDiffOfTodo(
+            currentTodo,
+            !!todoDiff[currentTodo.id],
+            projId,
+            { isPush, canChange },
+            syncedRegisteredTodos[currentTodo.id]
+          )
+        )
+          hasUpdates = true;
+
+        if (
+          !isPush &&
+          canChange &&
+          (!currentTodo.id ||
+            !this.syncedItems[currentTodo.id] ||
+            todoDiff[currentTodo.id])
+        ) {
+          hasUpdates = true;
+          currentTodo = null;
+          return;
+        }
+
+        todoDiff[currentTodo.id] = true;
+        body.push(currentTodo);
+        delete syncedItemsCopy[currentTodo.id];
+        currentTodo = null;
+      };
 
       for (const line of lines) {
         const todo = parseTodo(line);
         if (todo) {
-          if (buffer.length > 0) {
+          if (currentTodo) pushCurrentTodo();
+          else if (buffer) {
             body.push(buffer);
             buffer = "";
           }
 
           let syncedItem = this.syncedItems[todo.id];
 
-          if (!todo.id || !syncedItem || todoDiff[todo.id]) {
-            if (!todo.priority) todo.priority = 1;
-            todo.id = generateUUID();
+          if (!todo.priority)
+            todo.priority = this.plugin.settings.priorityMap[todo.id];
 
-            if (isPush)
-              this.itemAdd(
-                {
-                  project_id: projId,
-                  content: todo.content,
-                  priority: todo.priority,
-                  due: todo.due,
-                  labels: todo.labels
-                },
-                todo.id
-              );
-            else if (canChange) {
-              continue;
-            }
-          } else {
-            if (!todo.priority) todo.priority = syncedItem.priority;
-            let syncedRegisteredTodo = syncedRegisteredTodos[todo.id];
+          currentTodo = todo;
 
-            let update = getUpdatedItem(syncedItem, todo);
-
-            if (syncedRegisteredTodo) {
-              if (!syncedRegisteredTodo.priority)
-                syncedRegisteredTodo.priority = syncedItem.priority;
-
-              let registeredTodoUpdate = getUpdatedItem(
-                syncedItem,
-                syncedRegisteredTodo
-              );
-
-              if (Object.keys(registeredTodoUpdate).length > 1) {
-                update = registeredTodoUpdate;
-              }
-
-              if (syncedRegisteredTodo.completed !== syncedItem.completed) {
-                todo.completed = syncedRegisteredTodo.completed;
-              }
-            }
-
-            if (
-              update.content ||
-              update.due ||
-              update.priority ||
-              update.labels
-            ) {
-              if (isPush) {
-                this.itemUpdate(update);
-              } else if (canChange) {
-                todo.content = syncedItem.content;
-                todo.due = syncedItem.due;
-                todo.priority = syncedItem.priority;
-                todo.labels = syncedItem.labels;
-              }
-            }
-
-            if (shouldComplete(syncedItem, todo)) {
-              if (isPush) {
-                this.plugin.settings.completedTodos[todo.id] = {
-                  ...todo,
-                  project_id: projId
-                };
-                this.itemComplete({
-                  id: todo.id
-                });
-              } else if (canChange) todo.completed = false;
-            }
-
-            if (shouldUncomplete(syncedItem, todo)) {
-              if (isPush) {
-                if (this.plugin.settings.completedTodos[todo.id]) {
-                  delete this.plugin.settings.completedTodos[todo.id];
-                }
-
-                this.itemUncomplete({
-                  id: todo.id
-                });
-              } else if (canChange) todo.completed = true;
-            }
-
+          if (syncedItem) {
             delete syncedItemsCopy[todo.id];
           }
-
-          todoDiff[todo.id] = true;
-
-          body.push(todo);
         } else {
+          if (line.length == 0) {
+            if (currentTodo) {
+              if (line.length > 0) {
+                currentTodo.description = line.replaceAll("`", "");
+                buffer = "";
+              }
+              pushCurrentTodo();
+            }
+
+            continue;
+          }
           buffer += line + "\n";
         }
       }
 
-      if (buffer.length > 0) {
+      if (currentTodo) {
+        pushCurrentTodo();
+      } else if (buffer.length > 0) {
         body.push(buffer);
       }
 
       projectDiff[projId] = {
         name: name,
         body: body,
-        filePath: file,
-        needsUpdate: needsUpdate
+        filePath: file.path,
+        needsRename,
+        hasUpdates
       };
     }
 
@@ -543,7 +582,8 @@ export class TodoistAPI {
           name: project.name,
           body: [],
           filePath: "",
-          needsUpdate: false
+          needsRename: false,
+          hasUpdates: true
         };
       }
     }
@@ -553,6 +593,8 @@ export class TodoistAPI {
         this.itemDelete({
           id: itemId
         });
+        delete this.plugin.settings.completedTodos[itemId];
+        delete this.plugin.settings.priorityMap[itemId];
       } else {
         let project = projectDiff[item.project_id];
 
@@ -563,8 +605,10 @@ export class TodoistAPI {
             completed: item.completed,
             due: item.due,
             priority: item.priority,
-            labels: item.labels
+            labels: item.labels,
+            description: item.description
           });
+          project.hasUpdates = true;
         }
       }
     }
@@ -576,6 +620,17 @@ export class TodoistAPI {
 
   async writeDiff(projectDiffMap: ProjectDiffMap) {
     for (let [projId, project] of Object.entries(projectDiffMap)) {
+      if (!project.hasUpdates) continue;
+
+      this.plugin.settings.previousProjects[projId] = project.body.reduce(
+        (acc: string[], todo) => {
+          if (typeof todo === "string") return acc;
+          acc.push(todo.id);
+          return acc;
+        },
+        [] as string[]
+      );
+
       let tempIdMapped = this.temp_id_mapping[projId];
 
       let projPath: string = project.filePath;
@@ -587,7 +642,7 @@ export class TodoistAPI {
       let syncedProject = this.syncedProjects[projId];
 
       if (tempIdMapped || syncedProject) {
-        if (project.needsUpdate) {
+        if (project.needsRename) {
           projPath = this.getFilePath({
             name: syncedProject.name,
             id: projId
@@ -601,8 +656,18 @@ export class TodoistAPI {
         }
       }
 
-      this.writeBody(projPath, project.body);
+      let mtime = Math.floor(Date.now() / 1000);
+      this.plugin.settings.fileLastModifiedTime[projPath] = mtime;
+      await this.writeBody(projPath, project.body, mtime);
     }
+
+    this.plugin.settings.previousEditorSettings = {
+      showColor: this.plugin.settings.showColor,
+      showDescription: this.plugin.settings.showDescription,
+      sortTodos: this.plugin.settings.sortTodos
+    };
+
+    await this.plugin.saveSettings();
   }
 
   async filter(filter: string): Promise<ItemResponse[]> {
@@ -624,10 +689,13 @@ export class TodoistAPI {
     return parseResponse<ItemResponse[]>(response.body);
   }
 
-  private async writeBody(projPath: string, body: TodoBody) {
+  private async writeBody(projPath: string, body: TodoBody, mtime?: number) {
     await this.vault.adapter.write(
       projPath,
-      this.getContentOfBody(body).trimEnd()
+      this.getContentOfBody(body).trimEnd(),
+      {
+        mtime: mtime ?? Math.floor(Date.now() / 1000)
+      }
     );
   }
 
@@ -635,7 +703,7 @@ export class TodoistAPI {
     let content = "";
 
     for (let todo of this.plugin.settings.sortTodos ? sortTodos(body) : body) {
-      if (typeof todo === "string") {
+      if (typeof todo === "string" || !todo.id) {
         content += todo;
         continue;
       }
@@ -652,7 +720,8 @@ export class TodoistAPI {
           due: syncedTodo.due,
           id: todo.id,
           priority: syncedTodo.priority,
-          labels: syncedTodo.labels
+          labels: syncedTodo.labels,
+          description: syncedTodo.description
         };
       }
 
@@ -660,16 +729,29 @@ export class TodoistAPI {
       let due = todo.due ? `(@${todo.due.date})` : "";
 
       let labels = todo.labels.length ? `#${todo.labels.join(" #")}` : "";
-      let postfix = id ? `<!-- ${id} -->` : "";
-      let todoContent = this.plugin.settings.allowColor
+      let postfix = id ? `<!--${id}-->` : "";
+      let todoContent = this.plugin.settings.showColor
         ? `<span style="color : ${this.getPriorityColor(todo.priority)}" > ${
             todo.content
           } </span>`
         : todo.content;
 
+      let descriptionBody = todo.description
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .map((line) => `\t\`${line}\``)
+        .join("\n");
+
+      let description =
+        todo.description?.length > 0 && this.plugin.settings.showDescription
+          ? `\n${descriptionBody}`
+          : "";
+
+      if (id) this.plugin.settings.priorityMap[id] = todo.priority;
+
       content += `- [${
         todo.completed ? "x" : " "
-      }] ${todoContent} ${due} ${labels} ${postfix}\n`;
+      }] ${todoContent} ${due} ${labels} ${postfix}${description}\n`;
     }
 
     return content;
@@ -694,6 +776,7 @@ export class TodoistAPI {
     sectionInfo: MarkdownSectionInformation,
     sourcePath: string
   ): Promise<void> {
+    await this.sync();
     let lines = source.split("\n");
     let body: Todo[] = [];
     let filters: string[] = [];
@@ -702,6 +785,26 @@ export class TodoistAPI {
 
     let currentProjId: string = this.inbox_id ?? "";
 
+    let currentTodo: Todo | null = null;
+
+    let pushTodo = (todo: Todo) => {
+      this.itemAdd(
+        {
+          project_id: currentProjId,
+          content: todo.content,
+          priority: todo.priority,
+          due: todo.due,
+          labels: todo.labels,
+          description: todo.description
+        },
+        todo.id
+      );
+
+      body.push(todo);
+
+      currentTodo = null;
+    };
+
     for (let line of lines) {
       line = line.trim();
       let todo = parseTodo(line, true);
@@ -709,37 +812,35 @@ export class TodoistAPI {
       if (todo) {
         hasNewTodos = true;
         todo.id = generateUUID();
-
-        this.itemAdd(
-          {
-            project_id: currentProjId,
-            content: todo.content,
-            priority: todo.priority,
-            due: todo.due,
-            labels: todo.labels
-          },
-          todo.id
-        );
-
-        body.push(todo);
+        if (currentTodo) pushTodo(currentTodo);
+        currentTodo = todo;
       } else {
         if (line.length > 0) {
           if (line.startsWith("@")) {
             let potentialProj = line.slice(1);
             let projId = this.projectNameToIdMap[potentialProj];
-            console.log(projId);
             if (projId) {
               currentProjId = projId;
             }
             continue;
           }
-          let filter = line;
-          if (filter) {
-            filters.push(filter);
+          if (line.startsWith(":")) {
+            if (currentTodo) {
+              currentTodo.description = line.slice(1);
+            }
+          } else {
+            let filter = line;
+            if (filter) {
+              filters.push(filter);
+            }
           }
+
+          if (currentTodo) pushTodo(currentTodo);
         }
       }
     }
+
+    if (currentTodo) pushTodo(currentTodo);
 
     if (hasNewTodos) await this.softPull();
 
@@ -754,14 +855,15 @@ export class TodoistAPI {
           const items = await this.filter(filter);
 
           for (let item of items) {
-            let todo = {
+            let todo: TodoItem = {
               id: item.id,
               content: item.content,
               due: item.due,
               priority: item.priority,
               labels: item.labels,
               completed: !!item.completed_at,
-              project_id: item.project_id
+              project_id: item.project_id,
+              description: item.description
             };
 
             filterTodos.push(todo);
@@ -792,16 +894,118 @@ export class TodoistAPI {
       this.registerFile(
         sourcePath,
         body.reduce((acc, todo) => {
-          acc[todo.id] = todo;
+          acc[todo.id] = true;
           return acc;
-        }, {} as Record<string, Todo>)
+        }, {} as Record<string, boolean>)
       );
     }
 
     new Notice("Successfully parsed CodeBlock!");
   }
 
-  private async registerFile(file: string, todos: Record<string, Todo>) {
+  private getDiffOfTodo(
+    todo: Todo,
+    isNew: boolean,
+    projId: string,
+    { isPush, canChange }: DiffOptions,
+    syncedRegisteredTodo?: Todo
+  ): boolean {
+    let syncedItem = this.syncedItems[todo.id];
+    let didUpdate = false;
+    if (!todo.id || !syncedItem || isNew) {
+      if (!todo.priority) todo.priority = 1;
+      todo.id = generateUUID();
+
+      if (isPush)
+        this.itemAdd(
+          {
+            project_id: projId,
+            content: todo.content,
+            priority: todo.priority,
+            due: todo.due,
+            labels: todo.labels
+          },
+          todo.id
+        );
+    } else {
+      if (!todo.priority) {
+        didUpdate = true;
+        todo.priority = syncedItem.priority;
+      }
+      if (!todo.description && syncedItem.description) {
+        didUpdate = true;
+        todo.description = syncedItem.description;
+      }
+
+      let update = getUpdatedItem(syncedItem, todo);
+
+      if (syncedRegisteredTodo) {
+        if (!syncedRegisteredTodo.priority)
+          syncedRegisteredTodo.priority = syncedItem.priority;
+        if (!syncedRegisteredTodo.description) {
+          syncedRegisteredTodo.description = syncedItem.description;
+        }
+
+        let registeredTodoUpdate = getUpdatedItem(
+          syncedItem,
+          syncedRegisteredTodo
+        );
+
+        if (Object.keys(registeredTodoUpdate).length > 1) {
+          update = registeredTodoUpdate;
+        }
+
+        if (syncedRegisteredTodo.completed !== syncedItem.completed) {
+          todo.completed = syncedRegisteredTodo.completed;
+        }
+
+        if (syncedRegisteredTodo.description) {
+          todo.description = syncedRegisteredTodo.description;
+        }
+      }
+
+      if (Object.keys(update).length > 1) {
+        didUpdate = true;
+        if (isPush) {
+          this.itemUpdate(update);
+        } else if (!canChange) {
+          this.syncedItems[todo.id] = {
+            ...syncedItem,
+            ...update
+          };
+        }
+      }
+
+      if (shouldComplete(syncedItem, todo)) {
+        if (isPush) {
+          this.plugin.settings.completedTodos[todo.id] = {
+            ...todo,
+            description: todo.description ?? syncedItem.description,
+            project_id: projId
+          };
+          this.itemComplete({
+            id: todo.id
+          });
+        } else if (canChange) todo.completed = false;
+      }
+
+      if (shouldUncomplete(syncedItem, todo)) {
+        if (isPush) {
+          if (this.plugin.settings.completedTodos[todo.id]) {
+            delete this.plugin.settings.completedTodos[todo.id];
+          }
+
+          this.itemUncomplete({
+            id: todo.id
+          });
+        } else if (canChange) todo.completed = true;
+      }
+    }
+
+    return didUpdate;
+  }
+
+  private async registerFile(file: string, todos: Record<string, boolean>) {
     let registeredFile = this.plugin.settings.registeredFiles[file];
 
     if (registeredFile)
@@ -817,14 +1021,15 @@ export class TodoistAPI {
   private async syncCompletedItems(completed_items: CompletedItemResponse[]) {
     for (const item of completed_items) {
       let todo = item.item_object;
-      let todoItem = {
+      let todoItem: TodoItem = {
         id: todo.id,
         content: todo.content,
         due: todo.due,
         priority: todo.priority,
         labels: todo.labels,
-        completed: true,
-        project_id: item.project_id
+        project_id: todo.project_id,
+        description: todo.description,
+        completed: true
       };
 
       this.plugin.settings.completedTodos[todo.id] = todoItem;
