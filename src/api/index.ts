@@ -785,7 +785,6 @@ export class TodoistAPI {
     let currentTodo: Todo | null = null;
 
     let pushTodo = (todo: Todo) => {
-      console.log(currentProjId);
       this.itemAdd(
         {
           project_id: currentProjId,
@@ -820,7 +819,6 @@ export class TodoistAPI {
             let potentialProj = line.slice(1);
             let projId = this.projectNameToIdMap[potentialProj];
             if (projId) {
-              console.log(projId);
               currentProjId = projId;
             } else {
               let found = false;
@@ -1001,6 +999,7 @@ export class TodoistAPI {
       }
 
       if (shouldComplete(syncedItem, todo)) {
+        didUpdate = true;
         if (isPush) {
           this.plugin.settings.completedTodos[todo.id] = {
             ...todo,
@@ -1014,6 +1013,7 @@ export class TodoistAPI {
       }
 
       if (shouldUncomplete(syncedItem, todo)) {
+        didUpdate = true;
         if (isPush) {
           if (this.plugin.settings.completedTodos[todo.id]) {
             delete this.plugin.settings.completedTodos[todo.id];
