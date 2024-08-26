@@ -499,8 +499,6 @@ export class TodoistAPI {
             syncedRegisteredTodos[currentTodo.id]
           )
         ) {
-          console.log(currentTodo);
-          console.log("here");
           hasUpdates = true;
         }
 
@@ -947,7 +945,8 @@ export class TodoistAPI {
             content: todo.content,
             priority: todo.priority,
             due: todo.due,
-            labels: todo.labels
+            labels: todo.labels,
+            description: todo.description
           },
           todo.id
         );
