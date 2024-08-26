@@ -12,9 +12,13 @@ https://github.com/user-attachments/assets/fe19c9f2-fe40-4847-8c38-836dbc809630
 
 https://github.com/user-attachments/assets/05d9d64c-905a-4c87-8cb4-c4195ad3b898
 
-- Push to Todoist using [`Code Blocks`](https://docs.obsidian.md/Plugins/Editor/Markdown+post+processing#Post-process+Markdown+code+blocks)
+- Push to Todoist using a [`Code Block`](https://docs.obsidian.md/Plugins/Editor/Markdown+post+processing#Post-process+Markdown+code+blocks)
 
 https://github.com/user-attachments/assets/e261bc18-1959-4e5b-9899-23da84dda062
+
+- Specify what project you would like to add to using a `Code Block`
+
+https://github.com/user-attachments/assets/3f5e9acc-e0ab-4a5c-8199-1a8fbce6a71d
 
 - Add dates to your Todos!
 
