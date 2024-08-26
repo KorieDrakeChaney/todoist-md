@@ -1,7 +1,5 @@
-import { Editor, Notice } from "obsidian";
+import { Editor } from "obsidian";
 import TodoistMarkdownPlugin from "./main";
-import { parseResponse } from "./parser/json";
-import { ProjectResponse } from "./api/response";
 import { createReactModal } from "./ui/modal";
 
 const commands = {
@@ -25,22 +23,11 @@ const commands = {
       }
     }
   },
-  "todoist-soft-push": {
-    name: "Soft-Push",
+  "todoist-push": {
+    name: "Push",
     callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
       if (await plugin.services.todoistAPI.healthCheck()) {
-        await plugin.services.todoistAPI.softPush();
-      } else {
-        createReactModal(plugin, "TokenValidatorModal").open();
-      }
-    }
-  },
-
-  "todoist-forced-push": {
-    name: "Forced-Push",
-    callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
-      if (await plugin.services.todoistAPI.healthCheck()) {
-        await plugin.services.todoistAPI.forcedPush();
+        await plugin.services.todoistAPI.push();
       } else {
         createReactModal(plugin, "TokenValidatorModal").open();
       }

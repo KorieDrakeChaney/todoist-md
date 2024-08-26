@@ -1,4 +1,4 @@
-import { App, Notice, Plugin, PluginManifest } from "obsidian";
+import { App, Plugin, PluginManifest, TextFileView } from "obsidian";
 import {
   DEFAULT_SETTINGS,
   type TodoistMarkdownSettings,
@@ -7,6 +7,7 @@ import {
 import { createServices, Services } from "./services";
 import { createReactModal } from "./ui/modal";
 import { setupCommands } from "./commands";
+import { EphemeralState } from "./types";
 
 export default class TodoistMarkdownPlugin extends Plugin {
   readonly services: Services;
@@ -24,7 +25,27 @@ export default class TodoistMarkdownPlugin extends Plugin {
     this.registerMarkdownCodeBlockProcessor(
       "todomd",
       async (source, el, ctx) => {
-        await this.services.todoistAPI.pushCodeBlock(source, el, ctx);
+        let activeView = this.app.workspace.getActiveViewOfType(TextFileView);
+
+        if (activeView) {
+          let ephemeralState = activeView.getEphemeralState() as EphemeralState;
+
+          if (ephemeralState) {
+            let sectionInfo = ctx.getSectionInfo(el);
+            const sourcePath = ctx.sourcePath;
+            let { cursor } = ephemeralState;
+            let { from, to } = cursor;
+            let { lineEnd } = sectionInfo;
+
+            if (from.line > lineEnd) {
+              await this.services.todoistAPI.pushCodeBlock(
+                source,
+                sectionInfo,
+                sourcePath
+              );
+            }
+          }
+        }
       }
     );
 
@@ -54,7 +75,7 @@ export default class TodoistMarkdownPlugin extends Plugin {
 
     this.addRibbonIcon("step-forward", "Push to Todoist", async () => {
       if (this.settings.token) {
-        await this.services.todoistAPI.forcedPush();
+        await this.services.todoistAPI.push();
       } else {
         createReactModal(this, "TokenValidatorModal").open();
       }

@@ -410,7 +410,9 @@ const getDueDate = (date: string): DueDate | null => {
       dateObj.setDate(dateObj.getDate() + dayDifference);
       break;
     default:
-      dateObj = new Date(date);
+      // Fixed bug where date was off by one day
+      // Reference: https://stackoverflow.com/questions/7556591/is-the-javascript-date-object-always-one-day-off
+      dateObj = new Date(date.replaceAll("-", "/"));
 
       if (dateObj.toString() === "Invalid Date") {
         return null;

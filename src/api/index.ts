@@ -35,7 +35,7 @@ import {
   ProjectUpdateArgs
 } from "./arguments";
 import { parseResponse } from "src/parser/json";
-import { MarkdownPostProcessorContext, Notice, Vault } from "obsidian";
+import { MarkdownSectionInformation, Notice, Vault } from "obsidian";
 import {
   generateUUID,
   getUpdatedItem,
@@ -81,6 +81,7 @@ export class TodoistAPI {
   private syncToken: string | null = null;
   private commands: Command<unknown>[] = [];
 
+  private projectNameToIdMap: Record<string, string> = {};
   private syncedProjects: ProjectMap = {};
   private syncedItems: ItemMap = {};
 
@@ -128,11 +129,7 @@ export class TodoistAPI {
     await this.syncDiff({ isPush: false, canChange: true });
   }
 
-  async softPush() {
-    await this.syncDiff({ isPush: true, canChange: false });
-  }
-
-  async forcedPush() {
+  async push() {
     await this.syncDiff({ isPush: true, canChange: true });
   }
 
@@ -267,11 +264,14 @@ export class TodoistAPI {
 
   private syncProjects(projects: ProjectResponse[]) {
     const projectMap: ProjectMap = {};
+    const projectNameToIdMap: Record<string, string> = {};
 
     for (const project of projects) {
       projectMap[project.id] = project;
+      projectNameToIdMap[project.name] = project.id;
     }
 
+    this.projectNameToIdMap = projectNameToIdMap;
     this.syncedProjects = projectMap;
   }
 
@@ -675,14 +675,6 @@ export class TodoistAPI {
     return content;
   }
 
-  private async writeRegisteredFilesDiff(
-    diff: Record<string, (Todo | string)[]>
-  ) {
-    for (const [filePath, body] of Object.entries(diff)) {
-      await this.vault.adapter.write(filePath, this.getContentOfBody(body));
-    }
-  }
-
   private getFilePath(project: { name: string; id: string | null }): string {
     let name = project.name.replace(/[\/\\?%*:|"<>[\]#|^]/g, "-");
     let postfix = project.id ? ` - ${project.id}` : "";
@@ -699,25 +691,28 @@ export class TodoistAPI {
 
   async pushCodeBlock(
     source: string,
-    el: HTMLElement,
-    ctx: MarkdownPostProcessorContext
+    sectionInfo: MarkdownSectionInformation,
+    sourcePath: string
   ): Promise<void> {
-    let sectionInfo = ctx.getSectionInfo(el);
-    let filePath = ctx.sourcePath;
-
     let lines = source.split("\n");
     let body: Todo[] = [];
     let filters: string[] = [];
 
+    let hasNewTodos = false;
+
+    let currentProjId: string = this.inbox_id ?? "";
+
     for (let line of lines) {
+      line = line.trim();
       let todo = parseTodo(line, true);
 
       if (todo) {
+        hasNewTodos = true;
         todo.id = generateUUID();
 
         this.itemAdd(
           {
-            project_id: this.inbox_id,
+            project_id: currentProjId,
             content: todo.content,
             priority: todo.priority,
             due: todo.due,
@@ -728,48 +723,59 @@ export class TodoistAPI {
 
         body.push(todo);
       } else {
-        if (line.length > 0) filters.push(line);
+        if (line.length > 0) {
+          if (line.startsWith("@")) {
+            let potentialProj = line.slice(1);
+            let projId = this.projectNameToIdMap[potentialProj];
+            console.log(projId);
+            if (projId) {
+              currentProjId = projId;
+            }
+            continue;
+          }
+          let filter = line;
+          if (filter) {
+            filters.push(filter);
+          }
+        }
       }
     }
 
-    await this.sync();
+    if (hasNewTodos) await this.softPull();
 
-    let inboxFilePath = this.getFilePath({
-      name: "Inbox",
-      id: this.inbox_id
-    });
     let bodyContent = this.getContentOfBody(body);
-    let inboxContent = await this.vault.adapter.read(inboxFilePath);
-    await this.vault.adapter.write(inboxFilePath, bodyContent + inboxContent);
 
     let filterTodos: Todo[] = [];
 
-    for (let filter of filters) {
-      try {
-        const items = await this.filter(filter);
+    if (filters.length > 0) {
+      new Notice("Fetching items from Todoist...");
+      for (let filter of filters) {
+        try {
+          const items = await this.filter(filter);
 
-        for (let item of items) {
-          let todo = {
-            id: item.id,
-            content: item.content,
-            due: item.due,
-            priority: item.priority,
-            labels: item.labels,
-            completed: !!item.completed_at,
-            project_id: item.project_id
-          };
+          for (let item of items) {
+            let todo = {
+              id: item.id,
+              content: item.content,
+              due: item.due,
+              priority: item.priority,
+              labels: item.labels,
+              completed: !!item.completed_at,
+              project_id: item.project_id
+            };
 
-          filterTodos.push(todo);
+            filterTodos.push(todo);
+          }
+        } catch (error: unknown) {
+          new Notice(error.toString());
         }
-      } catch (error: unknown) {
-        new Notice(error.toString());
       }
     }
 
     const filterContent = this.getContentOfBody(filterTodos);
 
     await this.vault.adapter.write(
-      filePath,
+      sourcePath,
       insertTextAtPosition(
         bodyContent + filterContent,
         ignoreCodeBlock(sectionInfo.text),
@@ -784,13 +790,15 @@ export class TodoistAPI {
 
     if (body.length > 0) {
       this.registerFile(
-        filePath,
+        sourcePath,
         body.reduce((acc, todo) => {
           acc[todo.id] = todo;
           return acc;
         }, {} as Record<string, Todo>)
       );
     }
+
+    new Notice("Successfully parsed CodeBlock!");
   }
 
   private async registerFile(file: string, todos: Record<string, Todo>) {
