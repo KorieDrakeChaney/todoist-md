@@ -49,7 +49,6 @@ import {
   compareObjects
 } from "./utils";
 import { Priority, Project, Todo, TodoBody, TodoItem } from "./types";
-import { ChangeLog } from "src/settings";
 
 type TodoistSyncResponse = {
   sync_token: string;
