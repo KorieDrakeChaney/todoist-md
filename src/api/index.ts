@@ -340,7 +340,11 @@ export class TodoistAPI {
 
       let pushCurrentTodo = () => {
         if (buffer.length > 0) {
-          currentTodo.description = buffer.replaceAll("`", "").trim();
+          currentTodo.description = buffer
+            .replaceAll("`", "")
+            .split("\n")
+            .map((line) => line.trim())
+            .join("\n");
           buffer = "";
         }
 
@@ -353,7 +357,6 @@ export class TodoistAPI {
       };
 
       for (let line of lines) {
-        line = line.trim();
         let todo = parseTodo(line);
 
         if (todo) {
@@ -371,12 +374,12 @@ export class TodoistAPI {
             body.push(line + "\n");
           }
         } else {
-          if (line.length == 0) {
+          if (!line.startsWith("\t")) {
             if (currentTodo) {
               pushCurrentTodo();
+              body.push(line + "\n");
+              continue;
             }
-
-            continue;
           }
           buffer += line + "\n";
         }
@@ -485,7 +488,11 @@ export class TodoistAPI {
 
       const pushCurrentTodo = () => {
         if (buffer.length > 0) {
-          currentTodo.description = buffer.replaceAll("`", "").trim();
+          currentTodo.description = buffer
+            .replaceAll("`", "")
+            .split("\n")
+            .map((line) => line.trim())
+            .join("\n");
           buffer = "";
         }
 
@@ -539,9 +546,12 @@ export class TodoistAPI {
             delete syncedItemsCopy[todo.id];
           }
         } else {
-          if (line.length == 0) {
-            if (currentTodo) pushCurrentTodo();
-            continue;
+          if (!line.startsWith("\t")) {
+            if (currentTodo) {
+              pushCurrentTodo();
+              body.push(line + "\n");
+              continue;
+            }
           }
           buffer += line + "\n";
         }
@@ -732,15 +742,13 @@ export class TodoistAPI {
           } </span>`
         : todo.content;
 
-      let descriptionBody = todo.description
-        .split("\n")
-        .filter((line) => line.length > 0)
-        .map((line) => `\t\`${line}\``)
-        .join("\n");
-
       let description =
         todo.description?.length > 0 && this.plugin.settings.showDescription
-          ? `\n${descriptionBody}`
+          ? `\n${todo.description
+              .split("\n")
+              .filter((line) => line.length > 0)
+              .map((line) => `\t\`${line}\``)
+              .join("\n")}`
           : "";
 
       if (id) this.plugin.settings.priorityMap[id] = todo.priority;
@@ -953,7 +961,7 @@ export class TodoistAPI {
         didUpdate = true;
         todo.priority = syncedItem.priority;
       }
-      if (!todo.description && syncedItem.description) {
+      if (!todo.description && syncedItem.description && !isPush) {
         didUpdate = true;
         todo.description = syncedItem.description;
       }
@@ -963,7 +971,7 @@ export class TodoistAPI {
       if (syncedRegisteredTodo) {
         if (!syncedRegisteredTodo.priority)
           syncedRegisteredTodo.priority = syncedItem.priority;
-        if (!syncedRegisteredTodo.description) {
+        if (!syncedRegisteredTodo.description && !isPush) {
           syncedRegisteredTodo.description = syncedItem.description;
         }
 
