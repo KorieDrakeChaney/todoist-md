@@ -71,3 +71,20 @@ export type ItemUncompleteArgs = {
 export type ItemDeleteArgs = {
   id: string;
 };
+
+export type NoteAddArgs = {
+  item_id: string;
+  content: string;
+  file_attachment?: string;
+  uids_to_notify?: string[];
+};
+
+export type NoteUpdateArgs = {
+  id: string;
+  content: string;
+  file_attachment?: string;
+};
+
+export type NoteDeleteArgs = {
+  id: string;
+};

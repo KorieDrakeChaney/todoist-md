@@ -6,17 +6,15 @@ export type Todo = {
   priority?: Priority;
   labels: string[];
   description: string;
+  comments: Record<string, Note>;
+  mtime: number;
+  project_id: string;
 };
 
-export type TodoItem = {
+export type Note = {
   id: string | null;
   content: string;
-  completed: boolean;
-  due?: DueDate;
-  priority?: Priority;
-  labels: string[];
-  project_id: string;
-  description: string;
+  item_id: string;
 };
 
 export type Project = {

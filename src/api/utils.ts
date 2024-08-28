@@ -1,5 +1,5 @@
 import type { ItemUpdateArgs } from "./arguments";
-import type { DueDate, Priority, Todo, TodoBody, TodoItem } from "./types";
+import type { DueDate, Note, Priority, Todo, TodoBody } from "./types";
 import { v4 as uuidv4 } from "uuid";
 
 type IdParseState =
@@ -70,6 +70,16 @@ const parseId = (line: string): { body: string; id: string } => {
   return { body, id };
 };
 
+export const parseNote = (line: string, item_id: string): Note => {
+  const { body, id } = parseId(line);
+
+  return {
+    id: id?.length > 0 ? id : null,
+    content: removeHtml(body),
+    item_id
+  };
+};
+
 type TodoParseState =
   | "BEFORE_COMPLETED"
   | "COMPLETED_SPACE"
@@ -88,6 +98,8 @@ type TodoParseState =
 
 export const parseTodo = (
   line: string,
+  project_id: string = "",
+  mtime: number,
   isCodeBlock: boolean = false
 ): Todo | null => {
   if (line.length === 0) {
@@ -96,6 +108,8 @@ export const parseTodo = (
   let { body, id } = parseId(line);
 
   body = removeHtml(body);
+
+  if (body.length < 3) return null;
 
   let state: TodoParseState = "BEFORE_COMPLETED";
 
@@ -290,13 +304,16 @@ export const parseTodo = (
   }
 
   return {
+    project_id,
     id: id?.length > 0 ? id : null,
     content: content.trim(),
     completed,
     due: due,
     priority,
     labels,
-    description: ""
+    description: "",
+    comments: {},
+    mtime: mtime
   };
 };
 
@@ -415,7 +432,7 @@ export const compareDueDates = (a: DueDate, b: DueDate): boolean => {
   return a.date === b.date;
 };
 
-export const getUpdatedItem = (a: TodoItem, b: Todo): ItemUpdateArgs => {
+export const getUpdatedItem = (a: Todo, b: Todo): ItemUpdateArgs => {
   let update: ItemUpdateArgs = {
     id: a.id
   };
@@ -460,11 +477,11 @@ const arraysEqualUnordered = (arr1: string[], arr2: string[]): boolean => {
   return true;
 };
 
-export const shouldComplete = (syncedItem: TodoItem, item: Todo): boolean => {
+export const shouldComplete = (syncedItem: Todo, item: Todo): boolean => {
   return !syncedItem.completed && item.completed;
 };
 
-export const shouldUncomplete = (syncedItem: TodoItem, item: Todo): boolean => {
+export const shouldUncomplete = (syncedItem: Todo, item: Todo): boolean => {
   return syncedItem.completed && !item.completed;
 };
 
@@ -474,13 +491,40 @@ export const removeHtml = (html: string): string => {
   return el.textContent || "";
 };
 
-export const sortTodos = (body: TodoBody): TodoBody => {
+export const sortTodosTop = (body: TodoBody): TodoBody => {
   return body.sort((a, b) => {
     if (typeof a === "string") return 1;
     if (typeof b === "string") return -1;
 
+    if (a.completed && !b.completed) return 1;
+
+    if (!a.completed && b.completed) return -1;
+
     return b.priority - a.priority;
   });
+};
+
+export const sortTodos = (body: TodoBody): TodoBody => {
+  // groups
+
+  let sortedArray: TodoBody = [];
+
+  for (let i = 0; i < body.length; i++) {
+    if (typeof body[i] === "string") {
+      sortedArray.push(body[i]);
+    } else {
+      let group: TodoBody = [body[i]];
+      let j = i + 1;
+      while (j < body.length && typeof body[j] !== "string") {
+        group.push(body[j]);
+        j++;
+      }
+      i = j - 1;
+      sortedArray.push(...sortTodosTop(group));
+    }
+  }
+
+  return sortedArray;
 };
 
 export const insertTextAtPosition = (
@@ -551,3 +595,5 @@ export const compareObjects = <T extends object>(a: T, b: T): boolean => {
 
   return true;
 };
+
+export const getmtime = (): number => Math.floor(Date.now() / 1000);

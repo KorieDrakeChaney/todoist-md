@@ -4,6 +4,9 @@ import {
   ItemDeleteArgs,
   ItemUncompleteArgs,
   ItemUpdateArgs,
+  NoteAddArgs,
+  NoteDeleteArgs,
+  NoteUpdateArgs,
   ProjectAddArgs,
   ProjectDeleteArgs,
   ProjectUpdateArgs
@@ -19,7 +22,10 @@ export type Command<T> = {
     | "item_uncomplete"
     | "project_delete"
     | "project_update"
-    | "project_add";
+    | "project_add"
+    | "note_add"
+    | "note_delete"
+    | "note_update";
   uuid: string;
   temp_id?: string;
   args: T;
@@ -100,6 +106,34 @@ export const itemUncomplete = (
 ): Command<ItemUncompleteArgs> => {
   return {
     type: "item_uncomplete",
+    uuid: generateUUID(),
+    args: args
+  };
+};
+
+export const noteAdd = (
+  args: NoteAddArgs,
+  temp_id: string
+): Command<NoteAddArgs> => {
+  return {
+    type: "note_add",
+    uuid: generateUUID(),
+    temp_id: temp_id,
+    args: args
+  };
+};
+
+export const noteUpdate = (args: NoteUpdateArgs): Command<NoteUpdateArgs> => {
+  return {
+    type: "note_update",
+    uuid: generateUUID(),
+    args: args
+  };
+};
+
+export const noteDelete = (args: NoteDeleteArgs): Command<NoteDeleteArgs> => {
+  return {
+    type: "note_delete",
     uuid: generateUUID(),
     args: args
   };

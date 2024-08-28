@@ -1,12 +1,13 @@
 import { PluginSettingTab, Setting } from "obsidian";
 import type TodoistMarkdownPlugin from "./main";
 import { createReactModal } from "./ui/modal";
-import type { TodoItem, Priority } from "./api/types";
+import type { Todo, Priority } from "./api/types";
 
 type EditorSettings = {
   showDescription: boolean;
+  showComments: boolean;
   showColor: boolean;
-  sortTodos: boolean;
+  todosOnTop: boolean;
 } & MiscellaneousSettings;
 
 type GeneralSettings = {
@@ -17,12 +18,13 @@ type MiscellaneousSettings = {
   priorityColor: {
     [key: number]: string;
   };
+  commentColor: string;
 };
 
 type AppSettings = {
   token: string | undefined;
   registeredFiles: Record<string, Record<string, boolean>>;
-  completedTodos: Record<string, TodoItem>;
+  completedTodos: Record<string, Todo>;
   priorityMap: Record<string, Priority>;
 };
 
@@ -48,19 +50,23 @@ const DEFAULT_PRIORITY_COLOR = {
 export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
   previousProjects: {},
   showDescription: true,
+  showComments: true,
   priorityMap: {},
   registeredFiles: {},
   completedTodos: {},
   token: undefined,
   directory: "todos",
   showColor: true,
-  sortTodos: false,
+  todosOnTop: false,
   priorityColor: DEFAULT_PRIORITY_COLOR,
+  commentColor: "#9191e3",
   previousEditorSettings: {
     showDescription: true,
     showColor: true,
-    sortTodos: false,
-    priorityColor: DEFAULT_PRIORITY_COLOR
+    todosOnTop: false,
+    showComments: true,
+    priorityColor: DEFAULT_PRIORITY_COLOR,
+    commentColor: "#9191e3"
   },
   fileLastModifiedTime: {}
 };
@@ -147,18 +153,49 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Sort Todos at top")
-      .setDesc("Sort todos at the top of the markdown file")
+      .setName("Show Comments")
+      .setDesc("Show the comments of the task in the editor")
       .addToggle((toggle) =>
         toggle
-          .setValue(this.plugin.settings.sortTodos)
+          .setValue(this.plugin.settings.showComments)
           .onChange(async (value) => {
-            this.plugin.settings.sortTodos = value;
+            this.plugin.settings.showComments = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Show Todos on Top")
+      .setDesc("Show todos at the top of the markdown file")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.todosOnTop)
+          .onChange(async (value) => {
+            this.plugin.settings.todosOnTop = value;
             await this.plugin.saveSettings();
           })
       );
 
     this.createGroup("Miscellaneous");
+
+    new Setting(containerEl)
+      .setName("Comment Color")
+      .setDesc("Color for comments")
+      .addColorPicker((color) =>
+        color
+          .setValue(this.plugin.settings.commentColor)
+          .onChange(async (value) => {
+            this.plugin.settings.commentColor = value;
+            await this.plugin.saveSettings();
+          })
+      )
+      .addButton((button) =>
+        button.setIcon("reset").onClick(async () => {
+          this.plugin.settings.commentColor = DEFAULT_SETTINGS.commentColor;
+          await this.plugin.saveSettings();
+          this.display();
+        })
+      );
 
     for (let i = 1; i <= 4; i++) {
       new Setting(containerEl)
@@ -173,7 +210,7 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
             })
         )
         .addButton((button) =>
-          button.setButtonText("Reset").onClick(async () => {
+          button.setIcon("reset").onClick(async () => {
             this.plugin.settings.priorityColor[i] =
               DEFAULT_SETTINGS.priorityColor[i];
             await this.plugin.saveSettings();
