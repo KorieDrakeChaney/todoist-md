@@ -579,25 +579,17 @@ export class TodoistAPI {
           return;
         }
 
-        if (
-          currentTodo.completed &&
-          this.plugin.settings.completedTodos[currentTodo.id]
-        ) {
-          body.push(this.plugin.settings.completedTodos[currentTodo.id]);
-        } else {
-          body.push(currentTodo);
+        body.push(currentTodo);
 
-          if (
-            this.getDiffOfTodo(
-              currentTodo,
-              !!todoDiff[currentTodo.id],
-              { isPush, canChange },
-              syncedRegisteredTodos[currentTodo.id]
-            )
-          ) {
-            console.log("Has updates", currentTodo);
-            hasUpdates = true;
-          }
+        if (
+          this.getDiffOfTodo(
+            currentTodo,
+            !!todoDiff[currentTodo.id],
+            { isPush, canChange },
+            syncedRegisteredTodos[currentTodo.id]
+          )
+        ) {
+          hasUpdates = true;
         }
 
         for (const note of Object.values(currentTodo.comments)) {
@@ -784,7 +776,6 @@ export class TodoistAPI {
       },
       commentColor: this.plugin.settings.commentColor
     };
-
     for (let [projId, project] of Object.entries(projectDiffMap)) {
       if (!project.hasUpdates) continue;
 
@@ -1210,7 +1201,18 @@ export class TodoistAPI {
         }
       }
 
-      if (Object.keys(update).length > 1) {
+      let hasUpdates = Object.keys(update).length > 1;
+
+      if (
+        todo.completed &&
+        this.plugin.settings.completedTodos[todo.id] &&
+        hasUpdates
+      ) {
+        new Notice("Completed todos cannot be updated");
+        return true;
+      }
+
+      if (hasUpdates) {
         didUpdate = true;
         if (isPush) {
           this.itemUpdate(update);
