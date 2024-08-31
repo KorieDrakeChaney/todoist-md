@@ -363,8 +363,9 @@ export class TodoistAPI {
       }
 
       let projmtime = this.plugin.settings.fileLastModifiedTime[filePath];
+      let currProjmtime = file.stat.mtime;
 
-      if (isPush && projmtime === file.stat.mtime && !forcedUpdate) {
+      if (isPush && projmtime === currProjmtime && !forcedUpdate) {
         continue;
       }
 
@@ -400,6 +401,8 @@ export class TodoistAPI {
           currentTodo.mtime > syncedRegisteredTodo.mtime
         ) {
           syncedRegisteredTodos[currentTodo.id] = currentTodo;
+        } else {
+          syncedRegisteredTodos[currentTodo.id] = currentTodo;
         }
 
         body.push(currentTodo);
@@ -408,8 +411,7 @@ export class TodoistAPI {
       };
 
       for (let line of lines) {
-        // It's okay to use "" as the project_id because it will be updated later
-        let todo = parseTodo(line, "", projmtime);
+        let todo = parseTodo(line, "", currProjmtime);
 
         if (todo) {
           if (!todo.priority)
