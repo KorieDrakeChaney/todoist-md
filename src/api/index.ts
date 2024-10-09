@@ -358,7 +358,7 @@ export class TodoistAPI {
           if (
             Object.keys(getUpdatedItem(syncedRegisteredTodo, syncedItem))
               .length > 1 ||
-            (syncedRegisteredTodo.completed && !syncedItem.completed)
+            syncedRegisteredTodo.completed !== syncedItem.completed
           ) {
             projectsThatAreForced[syncedItem.project_id] = true;
           } else {
