@@ -3,7 +3,7 @@ import { createRoot, Root } from "react-dom/client";
 import TodoistMarkdownPlugin from "../../main";
 import { ReactNode } from "react";
 import { PluginProvider } from "../context";
-import { TokenValidatorModal } from "./TokenValidatorModal";
+import { TokenValidatorModal } from "./modal";
 
 type ModalType = "TokenValidatorModal";
 

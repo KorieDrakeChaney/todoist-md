@@ -352,6 +352,7 @@ export class TodoistAPI {
     let projectsThatAreForced: Record<string, boolean> = {};
 
     let index = 0;
+    let registeredFilesLinked: Record<string, number[]> = {};
     for (const [filePath, todos] of Object.entries(
       this.plugin.settings.registeredFiles
     )) {
@@ -362,12 +363,7 @@ export class TodoistAPI {
         continue;
       }
 
-      let projmtime = this.plugin.settings.fileLastModifiedTime[filePath];
       let currProjmtime = file.stat.mtime;
-
-      if (isPush && projmtime === currProjmtime && !forcedUpdate) {
-        continue;
-      }
 
       let content = await this.vault.adapter.read(filePath);
       let todoCopy = { ...todos };
@@ -388,12 +384,6 @@ export class TodoistAPI {
           buffer = "";
         }
 
-        let syncedItem = this.syncedItems[currentTodo.id];
-        if (syncedItem) {
-          projectsThatAreForced[syncedItem.project_id] = true;
-          currentTodo.project_id = syncedItem.project_id;
-        }
-
         let syncedRegisteredTodo = syncedRegisteredTodos[currentTodo.id];
 
         if (
@@ -403,6 +393,26 @@ export class TodoistAPI {
           syncedRegisteredTodos[currentTodo.id] = currentTodo;
         } else {
           syncedRegisteredTodos[currentTodo.id] = currentTodo;
+        }
+
+        let syncedItem = this.syncedItems[currentTodo.id];
+
+        if (syncedItem) {
+          if (
+            Object.keys(getUpdatedItem(syncedRegisteredTodo, syncedItem))
+              .length > 1
+          ) {
+            projectsThatAreForced[syncedItem.project_id] = true;
+          } else {
+            projectsThatAreForced[syncedItem.project_id] = false;
+          }
+
+          if (!registeredFilesLinked[syncedItem.id]) {
+            registeredFilesLinked[syncedItem.id] = [];
+          }
+
+          registeredFilesLinked[syncedItem.id].push(index);
+          currentTodo.project_id = syncedItem.project_id;
         }
 
         body.push(currentTodo);
@@ -469,7 +479,7 @@ export class TodoistAPI {
         body: body,
         filePath: filePath,
         needsRename: false,
-        hasUpdates: true
+        hasUpdates: false
       };
 
       index++;
@@ -591,6 +601,11 @@ export class TodoistAPI {
             syncedRegisteredTodos[currentTodo.id]
           )
         ) {
+          if (registeredFilesLinked[currentTodo.id]) {
+            for (let index of registeredFilesLinked[currentTodo.id]) {
+              projectDiff[index].hasUpdates = true;
+            }
+          }
           hasUpdates = true;
         }
 

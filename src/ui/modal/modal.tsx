@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
 import { usePluginContext } from "../context";
-import styles from "./TokenValidatorModal.module.css";
+import styles from "./modal.module.css";
 import { Button } from "../components";
-import { Modal, Notice } from "obsidian";
+import { Modal } from "obsidian";
 
 interface TokenValidatorModalProps {
   modal: Modal;
 }
 
 export const TokenValidatorModal = ({ modal }: TokenValidatorModalProps) => {
-  const { plugin } = usePluginContext();
-
   return (
     <div className={styles["token-modal"]}>
       <div>

@@ -1,4 +1,3 @@
-import { Plugin } from "obsidian";
 import { createContext, useContext, useState, ReactNode } from "react";
 import TodoistMarkdownPlugin from "src/main";
 

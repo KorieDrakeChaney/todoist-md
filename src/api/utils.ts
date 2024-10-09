@@ -505,8 +505,6 @@ export const sortTodosTop = (body: TodoBody): TodoBody => {
 };
 
 export const sortTodos = (body: TodoBody): TodoBody => {
-  // groups
-
   let sortedArray: TodoBody = [];
 
   for (let i = 0; i < body.length; i++) {
