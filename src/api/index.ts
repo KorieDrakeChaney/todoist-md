@@ -429,7 +429,7 @@ export class TodoistAPI {
         body: body,
         filePath: filePath,
         needsRename: false,
-        hasUpdates: false
+        hasUpdates: forcedUpdate
       };
 
       index++;
