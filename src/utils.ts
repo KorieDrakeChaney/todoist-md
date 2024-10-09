@@ -1,5 +1,5 @@
 import type { ItemUpdateArgs } from "./api/arguments";
-import type { DueDate, Note, Priority, Todo, TodoBody } from "./api/types";
+import type { DueDate, Priority, Todo, TodoBody } from "./api/types";
 import { v4 as uuidv4 } from "uuid";
 
 type IdParseState =
@@ -68,16 +68,6 @@ const parseId = (line: string): { body: string; id: string } => {
   }
 
   return { body, id };
-};
-
-export const parseNote = (line: string, item_id: string): Note => {
-  const { body, id } = parseId(line);
-
-  return {
-    id: id?.length > 0 ? id : null,
-    content: removeHtml(body),
-    item_id
-  };
 };
 
 type TodoParseState =
@@ -312,7 +302,6 @@ export const parseTodo = (
     priority,
     labels,
     description: "",
-    comments: {},
     mtime: mtime
   };
 };

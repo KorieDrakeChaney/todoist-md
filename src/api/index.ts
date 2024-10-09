@@ -5,8 +5,6 @@ import {
   Filter,
   ItemResponse,
   LabelResponse,
-  NoteResponse,
-  ProjectNoteResponse,
   ProjectResponse,
   SectionResponse
 } from "./response";
@@ -16,9 +14,6 @@ import {
   itemDelete,
   itemUncomplete,
   itemUpdate,
-  noteAdd,
-  noteDelete,
-  noteUpdate,
   projectAdd,
   projectDelete,
   projectUpdate,
@@ -33,9 +28,6 @@ import {
   ItemCompleteArgs,
   ItemDeleteArgs,
   ItemUpdateArgs,
-  NoteAddArgs,
-  NoteDeleteArgs,
-  NoteUpdateArgs,
   ProjectAddArgs,
   ProjectDeleteArgs,
   ProjectUpdateArgs
@@ -53,7 +45,6 @@ import {
   insertTextAtPosition,
   ignoreCodeBlock,
   compareObjects,
-  parseNote,
   getmtime,
   sortTodosTop
 } from "../utils";
@@ -63,8 +54,6 @@ type TodoistSyncResponse = {
   sync_token: string;
   projects?: ProjectResponse[];
   items?: ItemResponse[];
-  notes?: NoteResponse[];
-  project_notes?: ProjectNoteResponse[];
   sections?: SectionResponse[];
   labels?: LabelResponse[];
   filters?: Filter[];
@@ -94,7 +83,6 @@ export class TodoistAPI {
   private projectNameToIdMap: Record<string, string> = {};
   private syncedProjects: ProjectMap = {};
   private syncedItems: ItemMap = {};
-  private syncedNotes: Record<string, Note> = {};
 
   private temp_id_mapping: Record<string, string> = {};
   private inbox_id: string | null = null;
@@ -217,7 +205,6 @@ export class TodoistAPI {
 
     if (data.projects) this.syncProjects(data.projects);
     if (data.items) this.syncItems(data.items);
-    if (data.notes) this.syncNotes(data.notes);
 
     await this.syncCompletedItems(completedData.items);
 
@@ -263,19 +250,6 @@ export class TodoistAPI {
     this.commands.push(itemUncomplete(args));
   }
 
-  noteAdd(args: NoteAddArgs, tempId?: string): void {
-    const temp_id = tempId ?? generateUUID();
-    this.commands.push(noteAdd(args, temp_id));
-  }
-
-  noteUpdate(args: NoteUpdateArgs): void {
-    this.commands.push(noteUpdate(args));
-  }
-
-  noteDelete(args: NoteDeleteArgs): void {
-    this.commands.push(noteDelete(args));
-  }
-
   getBody(useSyncToken: boolean): string {
     const body = new URLSearchParams({
       sync_token: useSyncToken ? this.syncToken ?? "*" : "*",
@@ -310,24 +284,9 @@ export class TodoistAPI {
         completed: !!item.completed_at,
         project_id: item.project_id,
         description: item.description,
-        mtime: 0,
-        comments: {}
+        mtime: 0
       };
     }
-  }
-
-  private syncNotes(notes: NoteResponse[]) {
-    let noteMap: Record<string, Note> = {};
-
-    for (let note of notes) {
-      let syncedItem = this.syncedItems[note.item_id];
-      if (syncedItem) {
-        syncedItem.comments[note.id] = note;
-      }
-      noteMap[note.id] = note;
-    }
-
-    this.syncedNotes = noteMap;
   }
 
   private async getDiff({
@@ -342,7 +301,6 @@ export class TodoistAPI {
       {
         showColor: this.plugin.settings.showColor,
         showDescription: this.plugin.settings.showDescription,
-        showComments: this.plugin.settings.showComments,
         todosOnTop: this.plugin.settings.todosOnTop,
         priorityColor: this.plugin.settings.priorityColor,
         commentColor: this.plugin.settings.commentColor
@@ -393,6 +351,7 @@ export class TodoistAPI {
           syncedRegisteredTodos[currentTodo.id] = currentTodo;
         } else {
           syncedRegisteredTodos[currentTodo.id] = currentTodo;
+          syncedRegisteredTodo = currentTodo;
         }
 
         let syncedItem = this.syncedItems[currentTodo.id];
@@ -439,16 +398,7 @@ export class TodoistAPI {
           }
         } else {
           let lineTrim = line.trim();
-          if (lineTrim.startsWith("- ")) {
-            if (currentTodo) {
-              let note = parseNote(lineTrim.slice(1), currentTodo.id);
-              if (!note.id) {
-                note.id = generateUUID();
-              }
-              currentTodo.comments[note.id] = note;
-              continue;
-            }
-          }
+
           if (!line.startsWith("\t")) {
             if (currentTodo) {
               pushCurrentTodo();
@@ -493,7 +443,6 @@ export class TodoistAPI {
 
     const syncedProjectsCopy = { ...this.syncedProjects };
     const syncedItemsCopy = { ...this.syncedItems };
-    const syncedNotesCopy = { ...this.syncedNotes };
 
     for (let file of files) {
       if (!(file.extension === "md") || !file.path.startsWith(this.directory))
@@ -609,10 +558,6 @@ export class TodoistAPI {
           hasUpdates = true;
         }
 
-        for (const note of Object.values(currentTodo.comments)) {
-          delete syncedNotesCopy[note.id];
-        }
-
         todoDiff[currentTodo.id] = true;
         delete syncedItemsCopy[currentTodo.id];
         currentTodo = null;
@@ -633,16 +578,7 @@ export class TodoistAPI {
           currentTodo = todo;
         } else {
           let lineTrim = line.trim();
-          if (lineTrim.startsWith("- ")) {
-            if (currentTodo) {
-              let note = parseNote(lineTrim.slice(1), currentTodo.id);
-              if (!note.id) {
-                note.id = generateUUID();
-              }
-              currentTodo.comments[note.id] = note;
-              continue;
-            }
-          }
+
           if (!line.startsWith("\t")) {
             if (currentTodo) {
               pushCurrentTodo();
@@ -714,20 +650,6 @@ export class TodoistAPI {
       };
     }
 
-    for (const noteId of Object.keys(syncedNotesCopy)) {
-      if (isPush && canChange && this.plugin.settings.showComments) {
-        this.noteDelete({
-          id: noteId
-        });
-      } else {
-        let note = this.syncedNotes[noteId];
-        let itemId = note.item_id;
-        if (this.syncedItems[itemId]) {
-          this.syncedItems[itemId].comments[note.id] = note;
-        }
-      }
-    }
-
     for (const [projId, project] of Object.entries(syncedProjectsCopy)) {
       if (isPush && canChange) {
         this.projectDelete({
@@ -763,7 +685,6 @@ export class TodoistAPI {
             priority: item.priority,
             labels: item.labels,
             description: item.description,
-            comments: item.comments,
             mtime:
               this.plugin.settings.fileLastModifiedTime[project.filePath] ??
               Date.now() / 1000,
@@ -784,7 +705,6 @@ export class TodoistAPI {
       showColor: this.plugin.settings.showColor,
       showDescription: this.plugin.settings.showDescription,
       todosOnTop: this.plugin.settings.todosOnTop,
-      showComments: this.plugin.settings.showComments,
       priorityColor: {
         1: this.plugin.settings.priorityColor[1],
         2: this.plugin.settings.priorityColor[2],
@@ -906,29 +826,6 @@ export class TodoistAPI {
               .join("\n")
           : "";
 
-      let notes = Object.values(todo.comments)
-        .map((note) => {
-          let tempIdMapped = this.temp_id_mapping[note.id];
-          let syncedNote = this.syncedNotes[note.id];
-          let id = tempIdMapped
-            ? tempIdMapped
-            : syncedNote
-            ? syncedNote.id
-            : null;
-
-          if (!id) return null;
-
-          let postfix = id ? `<!--${id}-->` : "";
-
-          return `- ${
-            this.plugin.settings.showColor
-              ? `<span style="color:${this.plugin.settings.commentColor}">${note.content}</span>`
-              : note.content
-          } ${postfix}`;
-        })
-        .filter((note) => note !== null)
-        .join("\n");
-
       if (id) this.plugin.settings.priorityMap[id] = todo.priority;
 
       content += `- [${
@@ -936,10 +833,6 @@ export class TodoistAPI {
       }] ${todoContent} ${due} ${labels} ${postfix}${
         description.length > 0 && this.plugin.settings.showDescription
           ? `\n${description}`
-          : ""
-      }${
-        notes.length > 0 && this.plugin.settings.showComments
-          ? `\n${notes}`
           : ""
       }\n`;
     }
@@ -995,16 +888,6 @@ export class TodoistAPI {
         todo.id
       );
 
-      for (let [commentId, comment] of Object.entries(todo.comments)) {
-        this.noteAdd(
-          {
-            content: comment.content,
-            item_id: todo.id
-          },
-          commentId
-        );
-      }
-
       body.push(todo);
 
       currentTodo = null;
@@ -1051,19 +934,6 @@ export class TodoistAPI {
             continue;
           }
 
-          if (line.startsWith("!!")) {
-            if (currentTodo) {
-              let commentId = generateUUID();
-              let content = line.slice(2);
-              let item_id = currentTodo.id;
-              currentTodo.comments[commentId] = {
-                id: commentId,
-                content,
-                item_id
-              };
-            }
-            continue;
-          }
           if (!line.startsWith("!")) {
             if (currentTodo) {
               pushTodo(currentTodo);
@@ -1099,7 +969,6 @@ export class TodoistAPI {
               completed: !!item.completed_at,
               project_id: item.project_id,
               description: item.description,
-              comments: {},
               mtime: 0
             };
 
@@ -1182,13 +1051,6 @@ export class TodoistAPI {
         todo.description = syncedItem.description;
       }
 
-      if (
-        Object.keys(todo.comments).length === 0 &&
-        Object.keys(syncedItem.comments).length > 0
-      ) {
-        todo.comments = syncedItem.comments;
-      }
-
       let update = getUpdatedItem(syncedItem, todo);
 
       if (syncedRegisteredTodo) {
@@ -1261,30 +1123,6 @@ export class TodoistAPI {
         } else if (canChange) todo.completed = true;
       }
 
-      let syncedNotes: Record<string, boolean> = {};
-      for (const note of Object.values(todo.comments)) {
-        let syncedNote = this.syncedNotes[note.id];
-        if (!note.id || !syncedNote || syncedNotes[note.id]) {
-          didUpdate = true;
-          this.noteAdd(
-            {
-              content: note.content,
-              item_id: todo.id
-            },
-            note.id
-          );
-        } else {
-          if (note.content !== syncedNote.content) {
-            this.noteUpdate({
-              id: note.id,
-              content: note.content
-            });
-          }
-
-          syncedNotes[note.id] = true;
-        }
-      }
-
       if (todo.completed) {
         this.plugin.settings.completedTodos[todo.id] = todo;
       }
@@ -1318,8 +1156,7 @@ export class TodoistAPI {
         project_id: todo.project_id,
         description: todo.description,
         completed: true,
-        mtime: 0,
-        comments: {}
+        mtime: 0
       };
 
       this.plugin.settings.completedTodos[todo.id] = todoItem;

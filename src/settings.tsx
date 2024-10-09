@@ -5,7 +5,6 @@ import type { Todo, Priority } from "./api/types";
 
 type EditorSettings = {
   showDescription: boolean;
-  showComments: boolean;
   showColor: boolean;
   todosOnTop: boolean;
 } & MiscellaneousSettings;
@@ -50,7 +49,6 @@ const DEFAULT_PRIORITY_COLOR = {
 export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
   previousProjects: {},
   showDescription: true,
-  showComments: true,
   priorityMap: {},
   registeredFiles: {},
   completedTodos: {},
@@ -64,7 +62,6 @@ export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
     showDescription: true,
     showColor: true,
     todosOnTop: false,
-    showComments: true,
     priorityColor: DEFAULT_PRIORITY_COLOR,
     commentColor: "#9191e3"
   },
@@ -148,18 +145,6 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.showDescription)
           .onChange(async (value) => {
             this.plugin.settings.showDescription = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Show Comments")
-      .setDesc("Show the comments of the task in the editor")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.showComments)
-          .onChange(async (value) => {
-            this.plugin.settings.showComments = value;
             await this.plugin.saveSettings();
           })
       );

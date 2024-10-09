@@ -6,7 +6,6 @@ export type Todo = {
   priority?: Priority;
   labels: string[];
   description: string;
-  comments: Record<string, Note>;
   mtime: number;
   project_id: string;
 };

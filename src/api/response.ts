@@ -80,30 +80,6 @@ export type ItemResponse = {
   duration: TodoistDuration;
 };
 
-export type NoteResponse = {
-  id: string;
-  posted_uid: string;
-  item_id: string;
-  content: string;
-  file_attachment: TodoistFileAttachment;
-  uids_to_notify: string[];
-  is_deleted: boolean;
-  posted_at: string;
-  reactions: TodoistReaction;
-};
-
-export type ProjectNoteResponse = {
-  id: string;
-  posted_uid: string;
-  project_id: string;
-  content: string;
-  file_attachment: TodoistFileAttachment;
-  uids_to_notify: string[];
-  is_deleted: boolean;
-  posted_at: string;
-  reactions: TodoistReaction;
-};
-
 export type Filter = {
   id: string;
   name: string;
