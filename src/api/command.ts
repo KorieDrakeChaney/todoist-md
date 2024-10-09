@@ -11,7 +11,7 @@ import {
   ProjectDeleteArgs,
   ProjectUpdateArgs
 } from "./arguments";
-import { generateUUID } from "./utils";
+import { generateUUID } from "../utils";
 
 export type Command<T> = {
   type:

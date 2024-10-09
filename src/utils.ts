@@ -1,5 +1,5 @@
-import type { ItemUpdateArgs } from "./arguments";
-import type { DueDate, Note, Priority, Todo, TodoBody } from "./types";
+import type { ItemUpdateArgs } from "./api/arguments";
+import type { DueDate, Note, Priority, Todo, TodoBody } from "./api/types";
 import { v4 as uuidv4 } from "uuid";
 
 type IdParseState =

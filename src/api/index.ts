@@ -56,7 +56,7 @@ import {
   parseNote,
   getmtime,
   sortTodosTop
-} from "./utils";
+} from "../utils";
 import { Note, Priority, Project, Todo, TodoBody } from "./types";
 
 type TodoistSyncResponse = {
