@@ -345,11 +345,9 @@ export class TodoistAPI {
         let syncedRegisteredTodo = syncedRegisteredTodos[currentTodo.id];
 
         if (
-          syncedRegisteredTodo &&
+          !syncedRegisteredTodo ||
           currentTodo.mtime > syncedRegisteredTodo.mtime
         ) {
-          syncedRegisteredTodos[currentTodo.id] = currentTodo;
-        } else {
           syncedRegisteredTodos[currentTodo.id] = currentTodo;
           syncedRegisteredTodo = currentTodo;
         }
@@ -359,7 +357,8 @@ export class TodoistAPI {
         if (syncedItem) {
           if (
             Object.keys(getUpdatedItem(syncedRegisteredTodo, syncedItem))
-              .length > 1
+              .length > 1 ||
+            (syncedRegisteredTodo.completed && !syncedItem.completed)
           ) {
             projectsThatAreForced[syncedItem.project_id] = true;
           } else {
@@ -397,8 +396,6 @@ export class TodoistAPI {
             body.push(line + "\n");
           }
         } else {
-          let lineTrim = line.trim();
-
           if (!line.startsWith("\t")) {
             if (currentTodo) {
               pushCurrentTodo();
@@ -577,8 +574,6 @@ export class TodoistAPI {
 
           currentTodo = todo;
         } else {
-          let lineTrim = line.trim();
-
           if (!line.startsWith("\t")) {
             if (currentTodo) {
               pushCurrentTodo();
@@ -632,7 +627,6 @@ export class TodoistAPI {
 
             if (currentPriority < next.priority) {
               hasUpdates = true;
-              console.log(todo, next);
               break;
             } else {
               currentPriority = next.priority;
@@ -776,7 +770,6 @@ export class TodoistAPI {
   }
 
   private async writeBody(projPath: string, body: TodoBody) {
-    console.log("Writing to", projPath);
     let mtime = getmtime();
     this.plugin.settings.fileLastModifiedTime[projPath] = mtime;
     await this.vault.adapter.write(
@@ -1066,15 +1059,11 @@ export class TodoistAPI {
         );
 
         if (syncedRegisteredTodo.mtime > todo.mtime) {
-          if (Object.keys(registeredTodoUpdate).length > 1) {
-            update = registeredTodoUpdate;
-          }
-
-          if (syncedRegisteredTodo.completed !== syncedItem.completed) {
+          if (syncedRegisteredTodo.mtime > syncedItem.mtime) {
+            if (Object.keys(registeredTodoUpdate).length > 1) {
+              update = registeredTodoUpdate;
+            }
             todo.completed = syncedRegisteredTodo.completed;
-          }
-
-          if (syncedRegisteredTodo.description) {
             todo.description = syncedRegisteredTodo.description;
           }
         }
