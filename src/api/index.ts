@@ -784,6 +784,20 @@ export class TodoistAPI {
   private getContentOfBody(body: TodoBody): string {
     let content = "";
 
+    body = body.map((todo) => {
+      if (typeof todo === "string") return todo;
+      let itemId = todo.id;
+      let tempIdMapped = this.temp_id_mapping[itemId];
+      todo.id = tempIdMapped ? tempIdMapped : todo.id;
+      let syncedTodo = this.syncedItems[todo.id];
+
+      if (syncedTodo) return syncedTodo;
+
+      todo.id = tempIdMapped ? tempIdMapped : syncedTodo ? syncedTodo.id : null;
+
+      return todo;
+    });
+
     for (let todo of this.plugin.settings.todosOnTop
       ? sortTodosTop(body)
       : sortTodos(body)) {
@@ -792,18 +806,10 @@ export class TodoistAPI {
         continue;
       }
 
-      let itemId = todo.id;
-      let tempIdMapped = this.temp_id_mapping[itemId];
-      todo.id = tempIdMapped ? tempIdMapped : todo.id;
-      let syncedTodo = this.syncedItems[todo.id];
-
-      if (syncedTodo) todo = syncedTodo;
-
-      let id = tempIdMapped ? tempIdMapped : syncedTodo ? syncedTodo.id : null;
       let due = todo.due ? `(@${todo.due.date})` : "";
 
       let labels = todo.labels.length ? `#${todo.labels.join(" #")}` : "";
-      let postfix = id ? `<!--${id}-->` : "";
+      let postfix = todo.id ? `<!--${todo.id}-->` : "";
       let todoContent = this.plugin.settings.showColor
         ? `<span style="color:${this.getPriorityColor(todo.priority)}"> ${
             todo.content
@@ -819,7 +825,7 @@ export class TodoistAPI {
               .join("\n")
           : "";
 
-      if (id) this.plugin.settings.priorityMap[id] = todo.priority;
+      if (todo.id) this.plugin.settings.priorityMap[todo.id] = todo.priority;
 
       content += `- [${
         todo.completed ? "x" : " "
