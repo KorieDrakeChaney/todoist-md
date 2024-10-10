@@ -302,8 +302,7 @@ export class TodoistAPI {
         showColor: this.plugin.settings.showColor,
         showDescription: this.plugin.settings.showDescription,
         todosOnTop: this.plugin.settings.todosOnTop,
-        priorityColor: this.plugin.settings.priorityColor,
-        commentColor: this.plugin.settings.commentColor
+        priorityColor: this.plugin.settings.priorityColor
       }
     );
 
@@ -704,8 +703,7 @@ export class TodoistAPI {
         2: this.plugin.settings.priorityColor[2],
         3: this.plugin.settings.priorityColor[3],
         4: this.plugin.settings.priorityColor[4]
-      },
-      commentColor: this.plugin.settings.commentColor
+      }
     };
     for (let [projId, project] of Object.entries(projectDiffMap)) {
       if (!project.hasUpdates) continue;

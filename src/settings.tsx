@@ -17,7 +17,6 @@ type MiscellaneousSettings = {
   priorityColor: {
     [key: number]: string;
   };
-  commentColor: string;
 };
 
 type AppSettings = {
@@ -57,13 +56,11 @@ export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
   showColor: true,
   todosOnTop: false,
   priorityColor: DEFAULT_PRIORITY_COLOR,
-  commentColor: "#9191e3",
   previousEditorSettings: {
     showDescription: true,
     showColor: true,
     todosOnTop: false,
-    priorityColor: DEFAULT_PRIORITY_COLOR,
-    commentColor: "#9191e3"
+    priorityColor: DEFAULT_PRIORITY_COLOR
   },
   fileLastModifiedTime: {}
 };
@@ -162,25 +159,6 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
       );
 
     this.createGroup("Miscellaneous");
-
-    new Setting(containerEl)
-      .setName("Comment Color")
-      .setDesc("Color for comments")
-      .addColorPicker((color) =>
-        color
-          .setValue(this.plugin.settings.commentColor)
-          .onChange(async (value) => {
-            this.plugin.settings.commentColor = value;
-            await this.plugin.saveSettings();
-          })
-      )
-      .addButton((button) =>
-        button.setIcon("reset").onClick(async () => {
-          this.plugin.settings.commentColor = DEFAULT_SETTINGS.commentColor;
-          await this.plugin.saveSettings();
-          this.display();
-        })
-      );
 
     for (let i = 1; i <= 4; i++) {
       new Setting(containerEl)
