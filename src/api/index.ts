@@ -788,7 +788,7 @@ export class TodoistAPI {
 
       if (syncedTodo) return syncedTodo;
 
-      todo.id = tempIdMapped ? tempIdMapped : syncedTodo ? syncedTodo.id : null;
+      todo.id = null;
 
       return todo;
     });
@@ -796,7 +796,7 @@ export class TodoistAPI {
     for (let todo of this.plugin.settings.todosOnTop
       ? sortTodosTop(body)
       : sortTodos(body)) {
-      if (typeof todo === "string" || !todo.id) {
+      if (typeof todo === "string") {
         content += todo;
         continue;
       }
