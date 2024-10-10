@@ -170,10 +170,6 @@ export const parseTodo = (
         break;
       case "CONTENT":
         switch (body[cursor]) {
-          case " ":
-            buffer = " ";
-            state = "SPACE";
-            break;
           case "(":
             buffer = "(";
             state = "LEFT_PARENTHESES";
@@ -185,22 +181,6 @@ export const parseTodo = (
           default:
             content += body[cursor];
             break;
-        }
-        break;
-      case "SPACE":
-        switch (body[cursor]) {
-          case "(":
-            buffer += "(";
-            state = "LEFT_PARENTHESES";
-            break;
-          case "#":
-            state = "LABEL";
-            buffer = "";
-            break;
-          default:
-            state = "CONTENT";
-            content += " ";
-            cursor--;
         }
         break;
       case "LEFT_PARENTHESES":
