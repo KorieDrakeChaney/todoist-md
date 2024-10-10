@@ -360,10 +360,7 @@ export class TodoistAPI {
             syncedRegisteredTodo.completed !== syncedItem.completed
           ) {
             projectsThatAreForced[syncedItem.project_id] = true;
-          } else {
-            projectsThatAreForced[syncedItem.project_id] = false;
           }
-
           if (!registeredFilesLinked[syncedItem.id]) {
             registeredFilesLinked[syncedItem.id] = [];
           }
@@ -1063,13 +1060,12 @@ export class TodoistAPI {
         );
 
         if (syncedRegisteredTodo.mtime > todo.mtime) {
-          if (syncedRegisteredTodo.mtime > syncedItem.mtime) {
-            if (Object.keys(registeredTodoUpdate).length > 1) {
-              update = registeredTodoUpdate;
-            }
-            todo.completed = syncedRegisteredTodo.completed;
-            todo.description = syncedRegisteredTodo.description;
+          if (Object.keys(registeredTodoUpdate).length > 1) {
+            update = registeredTodoUpdate;
           }
+          todo.completed = syncedRegisteredTodo.completed;
+          todo.description = syncedRegisteredTodo.description;
+          console.log("TRUE", todo);
         }
       }
 
