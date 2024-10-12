@@ -42,13 +42,12 @@ import {
   shouldComplete,
   shouldUncomplete,
   sortTodos,
-  insertTextAtPosition,
-  ignoreCodeBlock,
   compareObjects,
   getmtime,
-  sortTodosTop
+  sortTodosTop,
+  insertBodyAtPosition
 } from "../utils";
-import { Note, Priority, Project, Todo, TodoBody } from "./types";
+import { Priority, Project, Todo, TodoBody } from "./types";
 
 type TodoistSyncResponse = {
   sync_token: string;
@@ -459,6 +458,11 @@ export class TodoistAPI {
       ) {
         if (syncedProj) {
           for (let id of this.plugin.settings.previousProjects[projId]) {
+            if (registeredFilesLinked[id]) {
+              for (let index of registeredFilesLinked[id]) {
+                projectDiff[index].hasUpdates = true;
+              }
+            }
             delete syncedItemsCopy[id];
           }
           delete syncedProjectsCopy[projId];
@@ -658,6 +662,11 @@ export class TodoistAPI {
 
     for (const [itemId, item] of Object.entries(syncedItemsCopy)) {
       if (isPush && canChange) {
+        if (registeredFilesLinked[itemId]) {
+          for (let index of registeredFilesLinked[itemId]) {
+            projectDiff[index].hasUpdates = true;
+          }
+        }
         this.itemDelete({
           id: itemId
         });
@@ -849,14 +858,19 @@ export class TodoistAPI {
   };
 
   async pushCodeBlock(
-    source: string,
     sectionInfo: MarkdownSectionInformation,
     sourcePath: string
   ): Promise<void> {
     await this.sync();
-    let lines = source.split("\n");
-    let body: Todo[] = [];
+
+    let lines = sectionInfo.text.trimEnd().split("\n");
+
+    let body: TodoBody = [];
+
+    let newTodos: Todo[] = [];
     let filters: string[] = [];
+
+    let state: "CODE_BLOCK" | "TEXT" = "TEXT";
 
     let hasNewTodos = false;
 
@@ -869,6 +883,7 @@ export class TodoistAPI {
     let pushTodo = (todo: Todo) => {
       if (buffer.length > 0) {
         todo.description = buffer;
+        buffer = "";
       }
       this.itemAdd(
         {
@@ -882,58 +897,96 @@ export class TodoistAPI {
         todo.id
       );
 
-      body.push(todo);
+      newTodos.push(todo);
 
       currentTodo = null;
     };
 
-    for (let line of lines) {
-      line = line.trim();
-      let todo = parseTodo(line, currentProjId, 0, true);
+    for (let cursor = 0; cursor < lines.length; cursor++) {
+      let line = lines[cursor];
 
-      if (todo) {
-        hasNewTodos = true;
-        todo.id = generateUUID();
-        if (currentTodo) pushTodo(currentTodo);
-        currentTodo = todo;
-      } else {
-        if (line.length > 0) {
-          if (line.startsWith("@")) {
+      if (line.startsWith("```todomd")) {
+        if (state === "CODE_BLOCK") {
+          if (currentTodo) pushTodo(currentTodo);
+          if (cursor < lines.length - 1 && lines[cursor + 1].length == 0)
+            cursor++;
+          state = "TEXT";
+        } else {
+          state = "CODE_BLOCK";
+        }
+        continue;
+      } else if (state === "CODE_BLOCK" && line.startsWith("```")) {
+        if (cursor < lines.length - 1 && lines[cursor + 1].length == 0)
+          cursor++;
+        state = "TEXT";
+        continue;
+      }
+
+      switch (state) {
+        case "TEXT": {
+          let todo = parseTodo(line, "", 0);
+
+          if (todo) {
+            body.push(todo);
+          } else {
+            body.push(line + "\n");
+          }
+          break;
+        }
+        case "CODE_BLOCK": {
+          line = line.trim();
+          let todo = parseTodo(line, currentProjId, 0, true);
+
+          if (todo) {
+            hasNewTodos = true;
+            todo.id = generateUUID();
             if (currentTodo) pushTodo(currentTodo);
+            currentTodo = todo;
+          } else {
+            if (line.length > 0) {
+              if (line.startsWith("@")) {
+                if (currentTodo) pushTodo(currentTodo);
 
-            let potentialProj = line.slice(1);
-            let projId = this.projectNameToIdMap[potentialProj];
-            if (projId) {
-              currentProjId = projId;
-            } else {
-              let found = false;
-              for (let [name, id] of Object.entries(this.projectNameToIdMap)) {
-                if (name.toLowerCase().includes(potentialProj.toLowerCase())) {
-                  currentProjId = id;
-                  found = true;
-                  break;
+                let potentialProj = line.slice(1);
+                let projId = this.projectNameToIdMap[potentialProj];
+                if (projId) {
+                  currentProjId = projId;
+                } else {
+                  let found = false;
+                  for (let [name, id] of Object.entries(
+                    this.projectNameToIdMap
+                  )) {
+                    if (
+                      name.toLowerCase().includes(potentialProj.toLowerCase())
+                    ) {
+                      currentProjId = id;
+                      found = true;
+                      break;
+                    }
+                  }
+                  if (!found) {
+                    currentProjId = generateUUID();
+                    this.projectAdd(
+                      {
+                        name: potentialProj
+                      },
+                      currentProjId
+                    );
+                  }
                 }
+
+                continue;
               }
-              if (!found) {
-                currentProjId = generateUUID();
-                this.projectAdd(
-                  {
-                    name: potentialProj
-                  },
-                  currentProjId
-                );
+
+              if (!line.startsWith("!")) {
+                if (currentTodo) {
+                  pushTodo(currentTodo);
+                }
+                if (line) filters.push(line);
+              } else {
+                buffer += line + "\n";
               }
             }
-
-            continue;
-          }
-
-          if (!line.startsWith("!")) {
-            if (currentTodo) {
-              pushTodo(currentTodo);
-            } else if (line) filters.push(line);
-          } else {
-            buffer += line + "\n";
           }
         }
       }
@@ -942,8 +995,6 @@ export class TodoistAPI {
     if (currentTodo) pushTodo(currentTodo);
 
     if (hasNewTodos) await this.softPull();
-
-    let bodyContent = this.getContentOfBody(body);
 
     let filterTodos: Todo[] = [];
 
@@ -974,27 +1025,23 @@ export class TodoistAPI {
       }
     }
 
-    const filterContent = this.getContentOfBody(filterTodos);
+    newTodos.push(...filterTodos);
 
-    await this.vault.adapter.write(
-      sourcePath,
-      insertTextAtPosition(
-        bodyContent + filterContent,
-        ignoreCodeBlock(sectionInfo.text),
-        {
-          lineStart: sectionInfo.lineStart,
-          lineEnd: sectionInfo.lineEnd
-        }
-      ).trimEnd()
-    );
+    body = insertBodyAtPosition(body, newTodos, sectionInfo.lineStart);
 
-    body = body.concat(filterTodos);
+    await this.writeBody(sourcePath, body);
 
     if (body.length > 0) {
       this.registerFile(
         sourcePath,
         body.reduce((acc, todo) => {
-          acc[todo.id] = true;
+          if (typeof todo === "string") return acc;
+          let id = todo.id;
+          let syncedItem = this.syncedItems[id];
+
+          if (!syncedItem) return acc;
+
+          acc[id] = true;
           return acc;
         }, {} as Record<string, boolean>)
       );
@@ -1065,7 +1112,6 @@ export class TodoistAPI {
           }
           todo.completed = syncedRegisteredTodo.completed;
           todo.description = syncedRegisteredTodo.description;
-          console.log("TRUE", todo);
         }
       }
 

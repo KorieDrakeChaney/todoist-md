@@ -494,61 +494,38 @@ export const sortTodos = (body: TodoBody): TodoBody => {
   return sortedArray;
 };
 
-export const insertTextAtPosition = (
-  text: string,
-  body: string,
-  position: { lineStart: number; lineEnd: number }
-): string => {
-  const lines = body.split("\n");
+export const insertBodyAtPosition = (
+  body: TodoBody,
+  insertBody: TodoBody,
+  lineStart: number
+) => {
   let cursor = 0;
-  let newBody = "";
+  let newBody = [];
 
-  while (cursor < lines.length) {
-    if (cursor === position.lineStart) {
-      newBody += text;
+  if (lineStart >= body.length) {
+    newBody.push(...body);
+
+    let diff = lineStart - body.length;
+
+    while (diff > 0) {
+      newBody.push("");
+      diff--;
     }
-    newBody += lines[cursor] + "\n";
-    cursor++;
+
+    newBody.push(...insertBody);
+
+    return newBody;
   }
 
-  if (position.lineStart >= lines.length) {
-    let diff = position.lineStart - lines.length;
-    if (diff > 0) {
-      newBody += "\n".repeat(diff - 1);
+  while (cursor < body.length) {
+    if (cursor === lineStart) {
+      newBody.push(...insertBody);
     }
-    newBody += text;
+    newBody.push(body[cursor]);
+    cursor++;
   }
 
   return newBody;
-};
-
-type CodeBlockCleanState = "BEFORE_CODE" | "CODE";
-
-export const ignoreCodeBlock = (body: string): string => {
-  let state: CodeBlockCleanState = "BEFORE_CODE";
-  let cursor = 0;
-  let content = "";
-  let lines = body.split("\n");
-
-  while (cursor < lines.length) {
-    switch (state) {
-      case "BEFORE_CODE":
-        if (lines[cursor].trim() === "```todomd") {
-          state = "CODE";
-        } else {
-          content += lines[cursor] + "\n";
-        }
-        break;
-      case "CODE":
-        if (lines[cursor].trim() === "```") {
-          state = "BEFORE_CODE";
-        }
-        break;
-    }
-    cursor++;
-  }
-
-  return content;
 };
 
 export const compareObjects = <T extends object>(a: T, b: T): boolean => {

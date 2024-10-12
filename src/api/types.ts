@@ -10,12 +10,6 @@ export type Todo = {
   project_id: string;
 };
 
-export type Note = {
-  id: string | null;
-  content: string;
-  item_id: string;
-};
-
 export type Project = {
   name: string;
   body: (string | Todo)[];

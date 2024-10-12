@@ -44,7 +44,6 @@ export default class TodoistMarkdownPlugin extends Plugin {
             if (from.line > lineEnd) {
               called = true;
               await this.services.todoistAPI.pushCodeBlock(
-                source,
                 sectionInfo,
                 sourcePath
               );
