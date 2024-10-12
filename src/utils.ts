@@ -466,8 +466,10 @@ export const sortTodosTop = (body: TodoBody): TodoBody => {
     if (typeof b === "string") return -1;
 
     if (a.completed && !b.completed) return 1;
-
     if (!a.completed && b.completed) return -1;
+
+    if (!a.id) return 1;
+    if (!b.id) return -1;
 
     return b.priority - a.priority;
   });
