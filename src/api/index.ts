@@ -846,11 +846,12 @@ export class TodoistAPI {
 
       let labels = todo.labels.length ? `#${todo.labels.join(" #")}` : "";
       let postfix = todo.id ? `<!--${todo.id}-->` : "";
-      let todoContent = this.plugin.settings.showTaskColor
-        ? `<span style="color:${this.getPriorityColor(todo.priority)}"> ${
-            todo.content
-          } </span>`
-        : todo.content;
+      let todoContent =
+        this.plugin.settings.showTaskColor && todo.id
+          ? `<span style="color:${this.getPriorityColor(todo.priority)}"> ${
+              todo.content
+            } </span>`
+          : todo.content;
 
       let description =
         todo.description?.length > 0 && this.plugin.settings.showDescription
