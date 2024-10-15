@@ -912,7 +912,7 @@ export class TodoistAPI {
 
     let buffer = "";
 
-    let pushTodo = (inCodeBlock: boolean = true) => {
+    let pushTodo = () => {
       if (!currentTodo) return;
 
       if (buffer.length > 0) {
@@ -924,7 +924,7 @@ export class TodoistAPI {
 
         buffer = "";
       }
-      if (inCodeBlock) {
+      if (state === "CODE_BLOCK") {
         this.itemAdd(
           {
             project_id: currentProjId,
@@ -938,7 +938,7 @@ export class TodoistAPI {
         );
       }
 
-      if (inCodeBlock) {
+      if (state === "CODE_BLOCK") {
         newTodos.push(currentTodo);
       } else {
         body.push(currentTodo);
@@ -949,6 +949,7 @@ export class TodoistAPI {
 
     for (let cursor = 0; cursor < lines.length; cursor++) {
       let line = lines[cursor];
+      console.log(line);
 
       if (line.startsWith("```todomd")) {
         if (state === "CODE_BLOCK") {
@@ -961,6 +962,7 @@ export class TodoistAPI {
         }
         continue;
       } else if (state === "CODE_BLOCK" && line.startsWith("```")) {
+        pushTodo();
         if (cursor < lines.length - 1 && lines[cursor + 1].length == 0)
           cursor++;
         state = "TEXT";
@@ -972,11 +974,11 @@ export class TodoistAPI {
           let todo = parseTodo(line, "", 0);
 
           if (todo) {
-            pushTodo(false);
+            pushTodo();
             currentTodo = todo;
           } else {
             if (!line.startsWith("\t") && !line.startsWith("    ")) {
-              pushTodo(false);
+              pushTodo();
               body.push(line + "\n");
             } else {
               buffer += buffer.length > 0 ? "\n" + line : line;
@@ -1025,11 +1027,7 @@ export class TodoistAPI {
                     );
                   }
                 }
-
-                continue;
-              }
-
-              if (!line.startsWith("! ")) {
+              } else if (!line.startsWith("! ")) {
                 pushTodo();
                 if (line) filters.push(line);
               } else {
