@@ -817,12 +817,12 @@ export class TodoistAPI {
           case "today":
             due = showColor
               ? getDueSpan("Today", this.plugin.settings.dueColor.today)
-              : "Today";
+              : "(@Today)";
             break;
           case "tomorrow":
             due = showColor
               ? getDueSpan("Tomorrow", this.plugin.settings.dueColor.tomorrow)
-              : "Tomorrow";
+              : "(@Tomorrow)";
             break;
           case "within_week":
             due = showColor
@@ -830,7 +830,7 @@ export class TodoistAPI {
                   getDay(todoDueDate),
                   this.plugin.settings.dueColor.within_week
                 )
-              : getDay(todoDueDate);
+              : `(@${getDay(todoDueDate)})`;
             break;
           case "future":
           case "past":
@@ -839,7 +839,7 @@ export class TodoistAPI {
                   todo.due.date,
                   this.plugin.settings.dueColor[dueState]
                 )
-              : todo.due.date;
+              : `(@${todo.due.date})`;
             break;
         }
       }
