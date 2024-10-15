@@ -5,7 +5,8 @@ import type { Todo, Priority } from "./api/types";
 
 type EditorSettings = {
   showDescription: boolean;
-  showColor: boolean;
+  showTaskColor: boolean;
+  showDueColor: boolean;
   todosOnTop: boolean;
   sortDate: 1 | 0 | -1;
 } & MiscellaneousSettings;
@@ -65,15 +66,17 @@ export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
   completedTodos: {},
   token: undefined,
   directory: "todos",
-  showColor: true,
   todosOnTop: false,
+  showDueColor: true,
+  showTaskColor: true,
   sortDate: 0,
   dueColor: DEFAULT_DUE_COLOR,
   priorityColor: DEFAULT_PRIORITY_COLOR,
   previousEditorSettings: {
     showDescription: true,
     sortDate: 0,
-    showColor: true,
+    showDueColor: true,
+    showTaskColor: true,
     todosOnTop: false,
     dueColor: DEFAULT_DUE_COLOR,
     priorityColor: DEFAULT_PRIORITY_COLOR
@@ -139,13 +142,25 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
     this.createGroup("Editor");
 
     new Setting(containerEl)
-      .setName("Show Color")
+      .setName("Show Task Color")
       .setDesc("Show the color of the task based on the priority in the editor")
       .addToggle((toggle) =>
         toggle
-          .setValue(this.plugin.settings.showColor)
+          .setValue(this.plugin.settings.showTaskColor)
           .onChange(async (value) => {
-            this.plugin.settings.showColor = value;
+            this.plugin.settings.showTaskColor = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Show Due Color")
+      .setDesc("Show the color of the task based on the due date in the editor")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.showDueColor)
+          .onChange(async (value) => {
+            this.plugin.settings.showDueColor = value;
             await this.plugin.saveSettings();
           })
       );

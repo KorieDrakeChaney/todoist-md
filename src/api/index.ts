@@ -301,7 +301,8 @@ export class TodoistAPI {
     let forcedUpdate = !compareObjects(
       this.plugin.settings.previousEditorSettings,
       {
-        showColor: this.plugin.settings.showColor,
+        showDueColor: this.plugin.settings.showDueColor,
+        showTaskColor: this.plugin.settings.showTaskColor,
         showDescription: this.plugin.settings.showDescription,
         todosOnTop: this.plugin.settings.todosOnTop,
         sortDate: this.plugin.settings.sortDate,
@@ -811,36 +812,41 @@ export class TodoistAPI {
       if (todo.due) {
         const todoDueDate = new Date(todo.due.date);
         const dueState = getDueState(currentDate, todoDueDate);
-
+        const showColor = this.plugin.settings.showDueColor;
         switch (dueState) {
           case "today":
-            due = getDueSpan("Today", this.plugin.settings.dueColor.today);
+            due = showColor
+              ? getDueSpan("Today", this.plugin.settings.dueColor.today)
+              : "Today";
             break;
           case "tomorrow":
-            due = getDueSpan(
-              "Tomorrow",
-              this.plugin.settings.dueColor.tomorrow
-            );
+            due = showColor
+              ? getDueSpan("Tomorrow", this.plugin.settings.dueColor.tomorrow)
+              : "Tomorrow";
             break;
           case "within_week":
-            due = getDueSpan(
-              getDay(todoDueDate),
-              this.plugin.settings.dueColor.within_week
-            );
+            due = showColor
+              ? getDueSpan(
+                  getDay(todoDueDate),
+                  this.plugin.settings.dueColor.within_week
+                )
+              : getDay(todoDueDate);
             break;
           case "future":
           case "past":
-            due = getDueSpan(
-              todo.due.date,
-              this.plugin.settings.dueColor[dueState]
-            );
+            due = showColor
+              ? getDueSpan(
+                  todo.due.date,
+                  this.plugin.settings.dueColor[dueState]
+                )
+              : todo.due.date;
             break;
         }
       }
 
       let labels = todo.labels.length ? `#${todo.labels.join(" #")}` : "";
       let postfix = todo.id ? `<!--${todo.id}-->` : "";
-      let todoContent = this.plugin.settings.showColor
+      let todoContent = this.plugin.settings.showTaskColor
         ? `<span style="color:${this.getPriorityColor(todo.priority)}"> ${
             todo.content
           } </span>`
