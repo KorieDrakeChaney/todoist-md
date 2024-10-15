@@ -41,10 +41,10 @@ import {
   parseTodo,
   shouldComplete,
   shouldUncomplete,
-  sortTodos,
+  sortTodoBody,
   compareObjects,
   getmtime,
-  sortTodosTop,
+  sortTodos,
   insertBodyAtPosition
 } from "../utils";
 import { Priority, Project, Todo, TodoBody } from "./types";
@@ -636,7 +636,7 @@ export class TodoistAPI {
         body: body,
         filePath: file.path,
         needsRename,
-        hasUpdates: forcedUpdate || hasUpdates
+        hasUpdates: forcedUpdate || hasUpdates || !isPush
       };
     }
 
@@ -788,8 +788,8 @@ export class TodoistAPI {
     });
 
     for (let todo of this.plugin.settings.todosOnTop
-      ? sortTodosTop(body)
-      : sortTodos(body)) {
+      ? sortTodos(body)
+      : sortTodoBody(body)) {
       if (typeof todo === "string") {
         content += todo;
         continue;

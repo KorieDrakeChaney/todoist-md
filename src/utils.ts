@@ -460,7 +460,7 @@ export const removeHtml = (html: string): string => {
   return el.textContent || "";
 };
 
-export const sortTodosTop = (body: TodoBody): TodoBody => {
+export const sortTodos = (body: TodoBody): TodoBody => {
   return body.sort((a, b) => {
     if (typeof a === "string") return 1;
     if (typeof b === "string") return -1;
@@ -471,11 +471,18 @@ export const sortTodosTop = (body: TodoBody): TodoBody => {
     if (!a.id) return 1;
     if (!b.id) return -1;
 
-    return b.priority - a.priority;
+    let aDue = a.due ? new Date(a.due.date).getTime() : 0;
+    let bDue = b.due ? new Date(b.due.date).getTime() : 0;
+
+    return b.priority - a.priority == 0
+      ? bDue == aDue
+        ? b.content.localeCompare(a.content)
+        : bDue - aDue
+      : b.priority - a.priority;
   });
 };
 
-export const sortTodos = (body: TodoBody): TodoBody => {
+export const sortTodoBody = (body: TodoBody): TodoBody => {
   let sortedArray: TodoBody = [];
 
   for (let i = 0; i < body.length; i++) {
@@ -489,7 +496,7 @@ export const sortTodos = (body: TodoBody): TodoBody => {
         j++;
       }
       i = j - 1;
-      sortedArray.push(...sortTodosTop(group));
+      sortedArray.push(...sortTodos(group));
     }
   }
 
