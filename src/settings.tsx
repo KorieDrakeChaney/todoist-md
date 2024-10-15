@@ -44,7 +44,7 @@ export type TodoistMarkdownSettings = EditorSettings &
   ChangeLog;
 
 const DEFAULT_PRIORITY_COLOR = {
-  1: "#db4035",
+  1: "#9b6feb",
   2: "#fad000",
   3: "#14aaf5",
   4: "#ffffff"
