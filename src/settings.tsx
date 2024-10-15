@@ -7,6 +7,7 @@ type EditorSettings = {
   showDescription: boolean;
   showColor: boolean;
   todosOnTop: boolean;
+  sortDate: 1 | 0 | -1;
 } & MiscellaneousSettings;
 
 type GeneralSettings = {
@@ -16,6 +17,9 @@ type GeneralSettings = {
 type MiscellaneousSettings = {
   priorityColor: {
     [key: number]: string;
+  };
+  dueColor: {
+    [key: string]: string;
   };
 };
 
@@ -45,6 +49,14 @@ const DEFAULT_PRIORITY_COLOR = {
   4: "#ffffff"
 };
 
+const DEFAULT_DUE_COLOR = {
+  past: "#f7b0ab",
+  today: "#6ffc97",
+  tomorrow: "#74e8f7",
+  within_week: "#a68eed",
+  future: "#bdffcc"
+};
+
 export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
   previousProjects: {},
   showDescription: true,
@@ -55,11 +67,15 @@ export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
   directory: "todos",
   showColor: true,
   todosOnTop: false,
+  sortDate: 0,
+  dueColor: DEFAULT_DUE_COLOR,
   priorityColor: DEFAULT_PRIORITY_COLOR,
   previousEditorSettings: {
     showDescription: true,
+    sortDate: 0,
     showColor: true,
     todosOnTop: false,
+    dueColor: DEFAULT_DUE_COLOR,
     priorityColor: DEFAULT_PRIORITY_COLOR
   },
   fileLastModifiedTime: {}
@@ -147,6 +163,30 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName("Sort Date")
+      .setDesc("Sort the todos by date")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({
+            Ascending: "Ascending",
+            Descending: "Descending",
+            Disabled: "Disabled"
+          })
+          .setValue(
+            this.plugin.settings.sortDate === 1
+              ? "Ascending"
+              : this.plugin.settings.sortDate === -1
+              ? "Descending"
+              : "Disabled"
+          )
+          .onChange(async (value) => {
+            this.plugin.settings.sortDate =
+              value === "Ascending" ? 1 : value === "Descending" ? -1 : 0;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName("Show Todos on Top")
       .setDesc("Show todos at the top of the markdown file")
       .addToggle((toggle) =>
@@ -159,6 +199,8 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
       );
 
     this.createGroup("Miscellaneous");
+
+    this.createSection("Priority Color");
 
     for (let i = 1; i <= 4; i++) {
       new Setting(containerEl)
@@ -181,9 +223,36 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
           })
         );
     }
+
+    this.createSection("Due Color");
+
+    Object.entries(this.plugin.settings.dueColor).forEach(([key, _]) => {
+      new Setting(containerEl)
+        .setName(`${key} Color`)
+        .setDesc(`Color for ${key} tasks`)
+        .addColorPicker((color) =>
+          color
+            .setValue(this.plugin.settings.dueColor[key])
+            .onChange(async (value) => {
+              this.plugin.settings.dueColor[key] = value;
+              await this.plugin.saveSettings();
+            })
+        )
+        .addButton((button) =>
+          button.setIcon("reset").onClick(async () => {
+            this.plugin.settings.dueColor[key] = DEFAULT_SETTINGS.dueColor[key];
+            await this.plugin.saveSettings();
+            this.display();
+          })
+        );
+    });
   }
 
   private createGroup(title: string) {
     this.containerEl.createEl("h3", { text: title });
+  }
+
+  private createSection(title: string) {
+    this.containerEl.createEl("h4", { text: title });
   }
 }

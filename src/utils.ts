@@ -307,6 +307,36 @@ export const generateUUID = (): string => {
   return uuidv4();
 };
 
+export const getDay = (
+  date: Date
+):
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday" => {
+  switch (date.getDay()) {
+    case 0:
+      return "sunday";
+    case 1:
+      return "monday";
+    case 2:
+      return "tuesday";
+    case 3:
+      return "wednesday";
+    case 4:
+      return "thursday";
+    case 5:
+      return "friday";
+    case 6:
+      return "saturday";
+    default:
+      return "monday";
+  }
+};
+
 const getDueDate = (date: string): DueDate | null => {
   let dateObj: Date;
 
@@ -460,7 +490,7 @@ export const removeHtml = (html: string): string => {
   return el.textContent || "";
 };
 
-export const sortTodos = (body: TodoBody): TodoBody => {
+export const sortTodos = (body: TodoBody, sortMethod: 1 | -1 | 0): TodoBody => {
   return body.sort((a, b) => {
     if (typeof a === "string") return 1;
     if (typeof b === "string") return -1;
@@ -471,18 +501,49 @@ export const sortTodos = (body: TodoBody): TodoBody => {
     if (!a.id) return 1;
     if (!b.id) return -1;
 
-    let aDue = a.due ? new Date(a.due.date).getTime() : 0;
-    let bDue = b.due ? new Date(b.due.date).getTime() : 0;
+    if (b.priority === a.priority) {
+      let aDue = a.due ? new Date(a.due.date).getTime() : 0;
+      let bDue = b.due ? new Date(b.due.date).getTime() : 0;
 
-    return b.priority - a.priority == 0
-      ? bDue == aDue
-        ? b.content.localeCompare(a.content)
-        : bDue - aDue
-      : b.priority - a.priority;
+      if (aDue === 0 && bDue !== 0) return 1;
+      if (aDue !== 0 && bDue === 0) return -1;
+
+      return aDue === bDue || sortMethod === 0
+        ? b.content.length > a.content.length
+          ? -1
+          : a.content.length > b.content.length
+          ? 1
+          : 0
+        : sortMethod * (aDue - bDue);
+    }
+
+    return b.priority - a.priority;
   });
 };
 
-export const sortTodoBody = (body: TodoBody): TodoBody => {
+export const getDueSpan = (date: string, color: string): string => {
+  return `<span style="color: ${color};">(@${date})</span>`;
+};
+
+export const getDueState = (
+  currentDate: Date,
+  dueDate: Date
+): "past" | "today" | "tomorrow" | "within_week" | "future" => {
+  const diff = Math.floor(
+    (dueDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (diff < 0) return "past";
+  if (diff === 0) return "today";
+  if (diff === 1) return "tomorrow";
+  if (diff < 7) return "within_week";
+  return "future";
+};
+
+export const sortTodoBody = (
+  body: TodoBody,
+  sortMethod: 1 | -1 | 0
+): TodoBody => {
   let sortedArray: TodoBody = [];
 
   for (let i = 0; i < body.length; i++) {
@@ -496,7 +557,7 @@ export const sortTodoBody = (body: TodoBody): TodoBody => {
         j++;
       }
       i = j - 1;
-      sortedArray.push(...sortTodos(group));
+      sortedArray.push(...sortTodos(group, sortMethod));
     }
   }
 
