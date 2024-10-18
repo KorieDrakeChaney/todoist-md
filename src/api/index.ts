@@ -950,7 +950,6 @@ export class TodoistAPI {
 
     for (let cursor = 0; cursor < lines.length; cursor++) {
       let line = lines[cursor];
-      console.log(line);
 
       if (line.startsWith("```todomd")) {
         if (state === "CODE_BLOCK") {
