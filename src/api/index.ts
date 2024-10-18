@@ -429,8 +429,13 @@ export class TodoistAPI {
       index++;
     }
 
-    if (!(await this.vault.adapter.exists(this.directory))) {
-      await this.vault.adapter.mkdir(this.directory);
+    if (
+      this.plugin.app.vault.getFolderByPath(this.plugin.settings.directory) ===
+      null
+    ) {
+      console.log(this.plugin.app.vault.getAllFolders(true));
+      console.log(this.plugin.settings.directory);
+      await this.plugin.app.vault.createFolder(this.plugin.settings.directory);
     }
 
     const files = this.vault.getMarkdownFiles();

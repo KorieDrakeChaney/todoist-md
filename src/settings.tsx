@@ -1,7 +1,14 @@
-import { PluginSettingTab, Setting } from "obsidian";
+import {
+  debounce,
+  PluginSettingTab,
+  prepareFuzzySearch,
+  SearchResult,
+  Setting
+} from "obsidian";
 import type TodoistMarkdownPlugin from "./main";
 import { createReactModal } from "./ui/modal";
 import type { Todo, Priority } from "./api/types";
+import styles from "./setting.module.css";
 
 type EditorSettings = {
   showDescription: boolean;
@@ -110,34 +117,11 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
 
     this.createGroup("General");
 
-    new Setting(containerEl)
+    const directory = new Setting(containerEl)
       .setName("Todoist Directory")
-      .setDesc("Directory to store todoist files")
-      .addDropdown(async (dropdown) => {
-        const folders = this.plugin.app.vault
-          .getAllFolders()
-          .map((folder) => folder.path);
+      .setDesc("Directory to store todoist files");
 
-        if (
-          folders.indexOf(this.plugin.settings.directory) === -1 &&
-          folders.length > 0
-        ) {
-          this.plugin.settings.directory = folders[0];
-          await this.plugin.saveSettings();
-        }
-
-        dropdown.addOptions(
-          folders.reduce((acc: Record<string, string>, folder) => {
-            acc[folder] = folder;
-            return acc;
-          }, {})
-        );
-
-        dropdown.onChange(async (value) => {
-          this.plugin.settings.directory = value;
-          await this.plugin.saveSettings();
-        });
-      });
+    this.createItemControl(directory.controlEl);
 
     this.createGroup("Editor");
 
@@ -261,6 +245,86 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
           })
         );
     });
+  }
+
+  private createItemControl(el: HTMLElement) {
+    const input = createEl("input");
+    input.type = "text";
+    input.spellcheck = false;
+    input.value = this.plugin.settings.directory;
+    input.placeholder = "Example: folder 1/folder 2";
+
+    const suggestionContainer = createDiv();
+    suggestionContainer.className = "suggestion-container";
+    const folders = this.plugin.app.vault.getAllFolders(true).map((folder) => {
+      return folder.name.length > 0 ? folder.name : "/";
+    });
+    let results: {
+      item: string;
+      result: SearchResult;
+    }[] = [];
+
+    const search = () => {
+      this.plugin.settings.directory = input.value;
+      this.plugin.saveSettings();
+
+      suggestionContainer.innerHTML = "";
+      const search = prepareFuzzySearch(input.value);
+      results = [];
+
+      for (const folder of folders) {
+        const result = search(folder);
+        if (result && result.score <= 0) {
+          results.push({
+            item: folder,
+            result
+          });
+        }
+      }
+
+      results.sort((a, b) => b.result.score - a.result.score);
+
+      for (let i = 0; i < 5 && i < results.length; i++) {
+        const div = createDiv();
+        div.className = styles["suggestion-item"];
+        div.innerText = results[i].item;
+        div.tabIndex = 0;
+        div.addEventListener("click", () => {
+          input.value = results[i].item;
+          this.plugin.settings.directory = results[i].item;
+          this.plugin.saveSettings();
+          suggestionContainer.remove();
+        });
+
+        suggestionContainer.appendChild(div);
+      }
+    };
+
+    const debouncer = debounce(search, 25);
+
+    input.addEventListener("input", debouncer);
+
+    input.addEventListener("focus", () => {
+      suggestionContainer.style.top = `${
+        input.getBoundingClientRect().bottom
+      }px`;
+      suggestionContainer.style.left = `${
+        input.getBoundingClientRect().left
+      }px`;
+      suggestionContainer.style.opacity = "100";
+      search();
+
+      document.body.appendChild(suggestionContainer);
+    });
+
+    input.addEventListener("blur", () => {
+      suggestionContainer.style.opacity = "0";
+      setTimeout(() => {
+        suggestionContainer.remove();
+      }, 150);
+    });
+
+    el.appendChild(input);
   }
 
   private createGroup(title: string) {
