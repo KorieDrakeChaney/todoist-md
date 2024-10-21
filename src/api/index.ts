@@ -341,6 +341,7 @@ export class TodoistAPI {
       let body: TodoBody = [];
       let buffer = "";
       let currentTodo: Todo | null = null;
+      let hasTodos = false;
 
       let pushCurrentTodo = () => {
         if (buffer.length > 0) {
@@ -366,6 +367,7 @@ export class TodoistAPI {
         let syncedItem = this.syncedItems[currentTodo.id];
 
         if (syncedItem) {
+          hasTodos = true;
           if (
             Object.keys(getUpdatedItem(syncedRegisteredTodo, syncedItem))
               .length > 1 ||
@@ -414,6 +416,11 @@ export class TodoistAPI {
         pushCurrentTodo();
       } else if (buffer.length > 0) {
         body.push(buffer);
+      }
+
+      if (!hasTodos) {
+        delete this.plugin.settings.registeredFiles[filePath];
+        continue;
       }
 
       projectDiff[index] = {
@@ -712,9 +719,9 @@ export class TodoistAPI {
         let itemId = todo.id;
         let tempIdMapped = this.temp_id_mapping[itemId];
         todo.id = tempIdMapped ? tempIdMapped : todo.id;
-        let syncedTodo = this.syncedItems[todo.id];
+        let syncedItem = this.syncedItems[todo.id];
 
-        if (syncedTodo) return syncedTodo;
+        if (syncedItem) return syncedItem;
 
         todo.id = null;
 
