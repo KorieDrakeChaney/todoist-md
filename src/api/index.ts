@@ -88,6 +88,8 @@ export class TodoistAPI {
   private syncedItems: ItemMap = {};
 
   private temp_id_mapping: Record<string, string> = {};
+  private temp_id_completed_todos: Record<string, boolean> = {};
+
   private inbox_id: string | null = null;
 
   constructor(plugin: TodoistMarkdownPlugin) {
@@ -97,6 +99,7 @@ export class TodoistAPI {
 
   private clear() {
     this.commands = [];
+    this.temp_id_completed_todos = {};
   }
 
   private async syncDiff({ isPush, canChange }: DiffOptions) {
@@ -720,26 +723,6 @@ export class TodoistAPI {
         projId = tempIdMapped;
       }
 
-      if (tempIdMapped || this.syncedProjects[projId]) {
-        this.plugin.settings.previousProjects[projId] = project.body.reduce(
-          (acc: string[], todo) => {
-            if (typeof todo === "string") return acc;
-
-            let itemId = todo.id;
-            let tempIdMapped = this.temp_id_mapping[itemId];
-            todo.id = tempIdMapped ? tempIdMapped : todo.id;
-            let syncedItem = this.syncedItems[todo.id];
-
-            if (syncedItem) {
-              acc.push(todo.id);
-            }
-
-            return acc;
-          },
-          [] as string[]
-        );
-      }
-
       let syncedProject = this.syncedProjects[projId];
 
       if (tempIdMapped || syncedProject) {
@@ -758,6 +741,26 @@ export class TodoistAPI {
       }
 
       await this.writeBody(projPath, project.body);
+
+      if (tempIdMapped || syncedProject) {
+        this.plugin.settings.previousProjects[projId] = project.body.reduce(
+          (acc: string[], todo) => {
+            if (typeof todo === "string") return acc;
+
+            let itemId = todo.id;
+            let tempIdMapped = this.temp_id_mapping[itemId];
+            todo.id = tempIdMapped ? tempIdMapped : todo.id;
+            let syncedItem = this.syncedItems[todo.id];
+
+            if (syncedItem) {
+              acc.push(todo.id);
+            }
+
+            return acc;
+          },
+          [] as string[]
+        );
+      }
     }
 
     await this.plugin.saveSettings();
@@ -803,12 +806,20 @@ export class TodoistAPI {
 
     body = body.map((todo) => {
       if (typeof todo === "string") return todo;
+      let prevId = todo.id;
       let itemId = todo.id;
       let tempIdMapped = this.temp_id_mapping[itemId];
+
       todo.id = tempIdMapped ? tempIdMapped : todo.id;
+
       let syncedItem = this.syncedItems[todo.id];
 
+      if (this.temp_id_completed_todos[prevId]) {
+        this.plugin.settings.completedTodos[todo.id] = todo;
+      }
+
       if (syncedItem) return syncedItem;
+      else if (tempIdMapped) return todo;
 
       todo.id = null;
 
@@ -1141,6 +1152,8 @@ export class TodoistAPI {
           this.itemComplete({
             id: todo.id
           });
+
+          this.temp_id_completed_todos[todo.id] = true;
         }
       }
     } else {
