@@ -15,6 +15,7 @@ type EditorSettings = {
   showTaskColor: boolean;
   showDueColor: boolean;
   todosOnTop: boolean;
+  useDatesOnly: boolean;
   sortDate: 1 | 0 | -1;
 } & MiscellaneousSettings;
 
@@ -33,7 +34,7 @@ type MiscellaneousSettings = {
 
 type AppSettings = {
   token: string | undefined;
-  registeredFiles: Record<string, Record<string, boolean>>;
+  registeredFiles: Record<string, boolean>;
   completedTodos: Record<string, Todo>;
   priorityMap: Record<string, Priority>;
 };
@@ -73,6 +74,7 @@ export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
   completedTodos: {},
   token: undefined,
   directory: "todos",
+  useDatesOnly: false,
   todosOnTop: false,
   showDueColor: true,
   showTaskColor: true,
@@ -81,6 +83,7 @@ export const DEFAULT_SETTINGS: TodoistMarkdownSettings = {
   priorityColor: DEFAULT_PRIORITY_COLOR,
   previousEditorSettings: {
     showDescription: true,
+    useDatesOnly: false,
     sortDate: 0,
     showDueColor: true,
     showTaskColor: true,
@@ -124,6 +127,18 @@ export class TodoistMarkdownSettingTab extends PluginSettingTab {
     this.createItemControl(directory.controlEl);
 
     this.createGroup("Editor");
+
+    new Setting(containerEl)
+      .setName("Use Dates Only")
+      .setDesc("Use only dates in the editor instead of it's day of the week")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.useDatesOnly)
+          .onChange(async (value) => {
+            this.plugin.settings.useDatesOnly = value;
+            await this.plugin.saveSettings();
+          })
+      );
 
     new Setting(containerEl)
       .setName("Show Task Color")

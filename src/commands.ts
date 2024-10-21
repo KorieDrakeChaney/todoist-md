@@ -1,4 +1,4 @@
-import { Editor } from "obsidian";
+import { Editor, MarkdownView } from "obsidian";
 import TodoistMarkdownPlugin from "./main";
 import { createReactModal } from "./ui/modal";
 
@@ -23,11 +23,18 @@ const commands = {
       }
     }
   },
-  "todoist-push": {
-    name: "Push",
+  "update-overdue-to-today": {
+    name: "Update all overdue tasks in the current file to today",
     callback: async (_: Editor, plugin: TodoistMarkdownPlugin) => {
       if (await plugin.services.todoistAPI.healthCheck()) {
-        await plugin.services.todoistAPI.push();
+        const currentFile =
+          plugin.app.workspace.getActiveViewOfType(MarkdownView);
+
+        if (currentFile) {
+          await plugin.services.todoistAPI.updateOverdueForFile(
+            currentFile.file.path
+          );
+        }
       } else {
         createReactModal(plugin, "TokenValidatorModal").open();
       }

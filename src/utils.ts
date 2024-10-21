@@ -310,34 +310,34 @@ export const generateUUID = (): string => {
 export const getDay = (
   date: Date
 ):
-  | "monday"
-  | "tuesday"
-  | "wednesday"
-  | "thursday"
-  | "friday"
-  | "saturday"
-  | "sunday" => {
+  | "Monday"
+  | "Tuesday"
+  | "Wednesday"
+  | "Thursday"
+  | "Friday"
+  | "Saturday"
+  | "Sunday" => {
   switch (date.getDay()) {
     case 0:
-      return "sunday";
+      return "Sunday";
     case 1:
-      return "monday";
+      return "Monday";
     case 2:
-      return "tuesday";
+      return "Tuesday";
     case 3:
-      return "wednesday";
+      return "Wednesday";
     case 4:
-      return "thursday";
+      return "Thursday";
     case 5:
-      return "friday";
+      return "Friday";
     case 6:
-      return "saturday";
+      return "Saturday";
     default:
-      return "monday";
+      return "Sunday";
   }
 };
 
-const getDueDate = (date: string): DueDate | null => {
+export const getDueDate = (date: string): DueDate | null => {
   let dateObj: Date;
 
   switch (date.toLowerCase()) {
@@ -611,3 +611,13 @@ export const compareObjects = <T extends object>(a: T, b: T): boolean => {
 };
 
 export const getmtime = (): number => Math.floor(Date.now() / 1000);
+
+export const batchArray = <T>(array: T[], batchSize: number): T[][] => {
+  let batchedArray: T[][] = [];
+
+  for (let i = 0; i < array.length; i += batchSize) {
+    batchedArray.push(array.slice(i, i + batchSize));
+  }
+
+  return batchedArray;
+};

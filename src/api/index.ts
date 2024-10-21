@@ -48,7 +48,9 @@ import {
   insertBodyAtPosition,
   getDueState,
   getDueSpan,
-  getDay
+  getDay,
+  batchArray,
+  getDueDate
 } from "../utils";
 import { Priority, Project, Todo, TodoBody } from "./types";
 
@@ -106,7 +108,15 @@ export class TodoistAPI {
     try {
       if (isPush) {
         diff = await this.getDiff({ isPush, canChange });
-        await this.sync();
+        const limit = 100;
+        if (this.commands.length >= limit) {
+          for (const batch of batchArray(this.commands, limit)) {
+            this.commands = batch;
+            await this.sync(false);
+          }
+        } else {
+          await this.sync(false);
+        }
       } else {
         await this.sync();
         diff = await this.getDiff({ isPush, canChange });
@@ -158,7 +168,7 @@ export class TodoistAPI {
     }
   }
 
-  async sync(useSyncToken: boolean = false): Promise<TodoistSyncResponse> {
+  async sync(needsComplete = true): Promise<TodoistSyncResponse> {
     if (!this.plugin.settings.token) {
       throw new Error("No token provided");
     }
@@ -179,20 +189,12 @@ export class TodoistAPI {
       annotate_items: "true"
     }).toString();
 
-    const completedResponse = await obsidianFetch(params);
-
-    if (completedResponse.status !== 200) {
-      throw new Error(
-        `Error syncing Todoist projects: ${completedResponse.body}`
-      );
-    }
-
-    const completedData = parseResponse<TodoistCompletedResponse>(
-      completedResponse.body
-    );
+    const completedResponse = needsComplete
+      ? await obsidianFetch(params)
+      : null;
 
     params.url = syncUrl;
-    params.body = this.getBody(useSyncToken);
+    params.body = this.getBody();
     const response = await obsidianFetch(params);
 
     if (response.status !== 200) {
@@ -208,7 +210,12 @@ export class TodoistAPI {
     if (data.projects) this.syncProjects(data.projects);
     if (data.items) this.syncItems(data.items);
 
-    await this.syncCompletedItems(completedData.items);
+    if (completedResponse && completedResponse.status === 200) {
+      const completedData = parseResponse<TodoistCompletedResponse>(
+        completedResponse.body
+      );
+      await this.syncCompletedItems(completedData.items);
+    }
 
     this.syncToken = data.sync_token;
     this.temp_id_mapping = data.temp_id_mapping;
@@ -252,9 +259,9 @@ export class TodoistAPI {
     this.commands.push(itemUncomplete(args));
   }
 
-  getBody(useSyncToken: boolean): string {
+  getBody(): string {
     const body = new URLSearchParams({
-      sync_token: useSyncToken ? this.syncToken ?? "*" : "*",
+      sync_token: "*",
       resource_types: JSON.stringify(["projects", "items", "notes"]),
       commands: JSON.stringify(this.commands)
     }).toString();
@@ -307,7 +314,8 @@ export class TodoistAPI {
         todosOnTop: this.plugin.settings.todosOnTop,
         sortDate: this.plugin.settings.sortDate,
         priorityColor: this.plugin.settings.priorityColor,
-        dueColor: this.plugin.settings.dueColor
+        dueColor: this.plugin.settings.dueColor,
+        useDatesOnly: this.plugin.settings.useDatesOnly
       }
     );
 
@@ -315,7 +323,7 @@ export class TodoistAPI {
 
     let index = 0;
     let registeredFilesLinked: Record<string, number[]> = {};
-    for (const [filePath, todos] of Object.entries(
+    for (const [filePath, _] of Object.entries(
       this.plugin.settings.registeredFiles
     )) {
       let file = this.vault.getFileByPath(filePath);
@@ -328,7 +336,6 @@ export class TodoistAPI {
       let currProjmtime = file.stat.mtime;
 
       let content = await this.vault.adapter.read(filePath);
-      let todoCopy = { ...todos };
 
       let lines = content.split("\n");
       let body: TodoBody = [];
@@ -375,7 +382,6 @@ export class TodoistAPI {
         }
 
         body.push(currentTodo);
-        delete todoCopy[currentTodo.id];
         currentTodo = null;
       };
 
@@ -410,14 +416,6 @@ export class TodoistAPI {
         body.push(buffer);
       }
 
-      for (const [todoId, _] of Object.entries(todoCopy)) {
-        delete todos[todoId];
-      }
-
-      if (Object.keys(todos).length === 0) {
-        delete this.plugin.settings.registeredFiles[filePath];
-      }
-
       projectDiff[index] = {
         name: "Inbox",
         body: body,
@@ -433,8 +431,6 @@ export class TodoistAPI {
       this.plugin.app.vault.getFolderByPath(this.plugin.settings.directory) ===
       null
     ) {
-      console.log(this.plugin.app.vault.getAllFolders(true));
-      console.log(this.plugin.settings.directory);
       await this.plugin.app.vault.createFolder(this.plugin.settings.directory);
     }
 
@@ -473,6 +469,7 @@ export class TodoistAPI {
             delete syncedItemsCopy[id];
           }
           delete syncedProjectsCopy[projId];
+          delete this.plugin.settings.previousProjects[projId];
         }
         continue;
       }
@@ -710,9 +707,23 @@ export class TodoistAPI {
     for (let [projId, project] of Object.entries(projectDiffMap)) {
       if (!project.hasUpdates) continue;
 
+      project.body = project.body.map((todo) => {
+        if (typeof todo === "string") return todo;
+        let itemId = todo.id;
+        let tempIdMapped = this.temp_id_mapping[itemId];
+        todo.id = tempIdMapped ? tempIdMapped : todo.id;
+        let syncedTodo = this.syncedItems[todo.id];
+
+        if (syncedTodo) return syncedTodo;
+
+        todo.id = null;
+
+        return todo;
+      });
+
       this.plugin.settings.previousProjects[projId] = project.body.reduce(
         (acc: string[], todo) => {
-          if (typeof todo === "string") return acc;
+          if (typeof todo === "string" || !todo.id) return acc;
           acc.push(todo.id);
           return acc;
         },
@@ -788,20 +799,6 @@ export class TodoistAPI {
       `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
     );
 
-    body = body.map((todo) => {
-      if (typeof todo === "string") return todo;
-      let itemId = todo.id;
-      let tempIdMapped = this.temp_id_mapping[itemId];
-      todo.id = tempIdMapped ? tempIdMapped : todo.id;
-      let syncedTodo = this.syncedItems[todo.id];
-
-      if (syncedTodo) return syncedTodo;
-
-      todo.id = null;
-
-      return todo;
-    });
-
     for (let todo of this.plugin.settings.todosOnTop
       ? sortTodos(body, this.plugin.settings.sortDate)
       : sortTodoBody(body, this.plugin.settings.sortDate)) {
@@ -810,8 +807,6 @@ export class TodoistAPI {
         continue;
       }
 
-      let isPastDue = false;
-
       let due = "";
 
       if (todo.due) {
@@ -819,23 +814,31 @@ export class TodoistAPI {
         const dueState = getDueState(currentDate, todoDueDate);
         const showColor = this.plugin.settings.showDueColor;
         switch (dueState) {
-          case "today":
+          case "today": {
+            const date = this.plugin.settings.useDatesOnly
+              ? todo.due.date
+              : "Today";
             due = showColor
-              ? getDueSpan("Today", this.plugin.settings.dueColor.today)
-              : "(@Today)";
+              ? getDueSpan(date, this.plugin.settings.dueColor.today)
+              : `(@${date})`;
             break;
-          case "tomorrow":
+          }
+          case "tomorrow": {
+            const date = this.plugin.settings.useDatesOnly
+              ? todo.due.date
+              : "Tomorrow";
             due = showColor
-              ? getDueSpan("Tomorrow", this.plugin.settings.dueColor.tomorrow)
-              : "(@Tomorrow)";
+              ? getDueSpan(date, this.plugin.settings.dueColor.tomorrow)
+              : `(@${date})`;
             break;
+          }
           case "within_week":
+            const date = this.plugin.settings.useDatesOnly
+              ? todo.due.date
+              : getDay(todoDueDate);
             due = showColor
-              ? getDueSpan(
-                  getDay(todoDueDate),
-                  this.plugin.settings.dueColor.within_week
-                )
-              : `(@${getDay(todoDueDate)})`;
+              ? getDueSpan(date, this.plugin.settings.dueColor.within_week)
+              : `(@${date})`;
             break;
           case "future":
           case "past":
@@ -1086,19 +1089,7 @@ export class TodoistAPI {
     await this.writeBody(sourcePath, body);
 
     if (body.length > 0) {
-      this.registerFile(
-        sourcePath,
-        body.reduce((acc, todo) => {
-          if (typeof todo === "string") return acc;
-          let id = todo.id;
-          let syncedItem = this.syncedItems[id];
-
-          if (!syncedItem) return acc;
-
-          acc[id] = true;
-          return acc;
-        }, {} as Record<string, boolean>)
-      );
+      this.registerFile(sourcePath);
     }
 
     new Notice("Successfully parsed CodeBlock!");
@@ -1220,15 +1211,8 @@ export class TodoistAPI {
     return didUpdate;
   }
 
-  private async registerFile(file: string, todos: Record<string, boolean>) {
-    let registeredFile = this.plugin.settings.registeredFiles[file];
-
-    if (registeredFile)
-      this.plugin.settings.registeredFiles[file] = {
-        ...registeredFile,
-        ...todos
-      };
-    else this.plugin.settings.registeredFiles[file] = todos;
+  private async registerFile(file: string) {
+    this.plugin.settings.registeredFiles[file] = true;
 
     await this.plugin.saveSettings();
   }
@@ -1257,5 +1241,102 @@ export class TodoistAPI {
     };
 
     await this.plugin.saveSettings();
+  }
+
+  async updateOverdueForFile(filePath: string) {
+    new Notice("Updating overdue items...");
+    await this.sync();
+
+    let file = this.vault.getFileByPath(filePath);
+
+    if (!file) return;
+
+    let content = await this.vault.adapter.read(filePath);
+
+    let lines = content.split("\n");
+
+    let body: TodoBody = [];
+
+    let currentTodo: Todo | null = null;
+    let buffer = "";
+
+    const pushCurrentTodo = () => {
+      if (!currentTodo) return;
+
+      let syncedItem = this.syncedItems[currentTodo.id];
+      if (!currentTodo.priority)
+        currentTodo.priority = syncedItem ? syncedItem.priority : 1;
+
+      if (buffer.length > 0) {
+        currentTodo.description = buffer
+          .replace(/`/g, "")
+          .split("\n")
+          .map((line) => line.trim())
+          .join("\n");
+
+        buffer = "";
+      }
+
+      if (currentTodo.due || (syncedItem && syncedItem.due)) {
+        const dueObj = new Date();
+        const dueString = `${dueObj.getFullYear()}-${
+          dueObj.getMonth() + 1
+        }-${dueObj.getDate()}`;
+        const object = getDueDate(dueString);
+
+        if (!syncedItem || !syncedItem.completed) {
+          currentTodo.due = object;
+        }
+
+        if (syncedItem) {
+          this.itemUpdate({
+            id: currentTodo.id,
+            due: object
+          });
+        }
+      }
+
+      body.push(currentTodo);
+
+      currentTodo = null;
+    };
+
+    for (let line of lines) {
+      let todo = parseTodo(
+        line,
+        this.inbox_id ?? "",
+        this.plugin.settings.fileLastModifiedTime[filePath]
+      );
+
+      if (todo) {
+        pushCurrentTodo();
+
+        currentTodo = todo;
+      } else {
+        if (!line.startsWith("\t") && !line.startsWith("    ")) {
+          if (currentTodo) {
+            pushCurrentTodo();
+          }
+          body.push(line + "\n");
+        } else {
+          if (currentTodo) {
+            buffer += buffer.length > 0 ? "\n" + line : line;
+          } else {
+            body.push(line + "\n");
+          }
+        }
+      }
+    }
+
+    if (currentTodo) {
+      pushCurrentTodo();
+    } else if (buffer.length > 0) {
+      body.push(buffer);
+    }
+
+    await this.sync();
+    await this.writeBody(filePath, body);
+
+    new Notice("Successfully updated overdue items!");
   }
 }
