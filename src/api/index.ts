@@ -92,6 +92,8 @@ export class TodoistAPI {
 
   private inbox_id: string | null = null;
 
+  private current_sync_token: string | null = null;
+
   constructor(plugin: TodoistMarkdownPlugin) {
     this.plugin = plugin;
     this.vault = plugin.app.vault;
@@ -114,7 +116,7 @@ export class TodoistAPI {
         if (this.commands.length >= limit) {
           for (const batch of batchArray(this.commands, limit)) {
             this.commands = batch;
-            await this.sync(false);
+            await this.sync(false, true);
           }
         } else {
           await this.sync(false);
@@ -170,7 +172,10 @@ export class TodoistAPI {
     }
   }
 
-  async sync(needsComplete = true): Promise<TodoistSyncResponse> {
+  async sync(
+    needsComplete = true,
+    incrementalSync: boolean = false
+  ): Promise<TodoistSyncResponse> {
     if (!this.plugin.settings.token) {
       throw new Error("No token provided");
     }
@@ -196,7 +201,9 @@ export class TodoistAPI {
       : null;
 
     params.url = syncUrl;
-    params.body = this.getBody();
+    params.body = this.getBody(
+      incrementalSync ? this.current_sync_token ?? "*" : "*"
+    );
     const response = await obsidianFetch(params);
 
     if (response.status !== 200) {
@@ -205,11 +212,13 @@ export class TodoistAPI {
 
     const data = parseResponse<TodoistSyncResponse>(response.body);
 
+    this.current_sync_token = data.sync_token;
+
     for (const project of data.projects ?? []) {
       if (project.inbox_project) this.inbox_id = project.id;
     }
 
-    if (data.projects) this.syncProjects(data.projects);
+    if (data.projects) this.syncProjects(data.projects, incrementalSync);
     if (data.items) this.syncItems(data.items);
 
     const completedData =
@@ -219,7 +228,9 @@ export class TodoistAPI {
 
     await this.syncCompletedItems(completedData.items);
 
-    this.temp_id_mapping = data.temp_id_mapping;
+    this.temp_id_mapping = incrementalSync
+      ? Object.assign(this.temp_id_mapping, data.temp_id_mapping)
+      : data.temp_id_mapping;
 
     return data;
   }
@@ -260,9 +271,9 @@ export class TodoistAPI {
     this.commands.push(itemUncomplete(args));
   }
 
-  getBody(): string {
+  getBody(syncToken: string): string {
     const body = new URLSearchParams({
-      sync_token: "*",
+      sync_token: syncToken,
       resource_types: JSON.stringify(["projects", "items", "notes"]),
       commands: JSON.stringify(this.commands)
     }).toString();
@@ -270,7 +281,7 @@ export class TodoistAPI {
     return body;
   }
 
-  private syncProjects(projects: ProjectResponse[]) {
+  private syncProjects(projects: ProjectResponse[], incrementalSync = false) {
     const projectMap: ProjectMap = {};
     const projectNameToIdMap: Record<string, string> = {};
 
@@ -279,13 +290,19 @@ export class TodoistAPI {
       projectNameToIdMap[project.name] = project.id;
     }
 
-    this.projectNameToIdMap = projectNameToIdMap;
-    this.syncedProjects = projectMap;
+    this.projectNameToIdMap = incrementalSync
+      ? Object.assign(projectNameToIdMap, this.projectNameToIdMap)
+      : projectNameToIdMap;
+    this.syncedProjects = incrementalSync
+      ? Object.assign(projectMap, this.syncedProjects)
+      : projectMap;
   }
 
-  private syncItems(items: ItemResponse[]) {
+  private syncItems(items: ItemResponse[], incrementalSync = false) {
+    const itemMap: ItemMap = {};
+
     for (const item of items) {
-      this.syncedItems[item.id] = {
+      itemMap[item.id] = {
         id: item.id,
         content: item.content,
         due: item.due,
@@ -297,6 +314,10 @@ export class TodoistAPI {
         mtime: 0
       };
     }
+
+    this.syncedItems = incrementalSync
+      ? Object.assign(itemMap, this.syncedItems)
+      : itemMap;
   }
 
   private async getDiff({
