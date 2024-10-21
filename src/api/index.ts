@@ -714,24 +714,19 @@ export class TodoistAPI {
     for (let [projId, project] of Object.entries(projectDiffMap)) {
       if (!project.hasUpdates) continue;
 
-      project.body = project.body.map((todo) => {
-        if (typeof todo === "string") return todo;
-        let itemId = todo.id;
-        let tempIdMapped = this.temp_id_mapping[itemId];
-        todo.id = tempIdMapped ? tempIdMapped : todo.id;
-        let syncedItem = this.syncedItems[todo.id];
-
-        if (syncedItem) return syncedItem;
-
-        todo.id = null;
-
-        return todo;
-      });
-
       this.plugin.settings.previousProjects[projId] = project.body.reduce(
         (acc: string[], todo) => {
-          if (typeof todo === "string" || !todo.id) return acc;
-          acc.push(todo.id);
+          if (typeof todo === "string") return acc;
+
+          let itemId = todo.id;
+          let tempIdMapped = this.temp_id_mapping[itemId];
+          todo.id = tempIdMapped ? tempIdMapped : todo.id;
+          let syncedItem = this.syncedItems[todo.id];
+
+          if (syncedItem) {
+            acc.push(todo.id);
+          }
+
           return acc;
         },
         [] as string[]
@@ -805,6 +800,20 @@ export class TodoistAPI {
     const currentDate = new Date(
       `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
     );
+
+    body = body.map((todo) => {
+      if (typeof todo === "string") return todo;
+      let itemId = todo.id;
+      let tempIdMapped = this.temp_id_mapping[itemId];
+      todo.id = tempIdMapped ? tempIdMapped : todo.id;
+      let syncedItem = this.syncedItems[todo.id];
+
+      if (syncedItem) return syncedItem;
+
+      todo.id = null;
+
+      return todo;
+    });
 
     for (let todo of this.plugin.settings.todosOnTop
       ? sortTodos(body, this.plugin.settings.sortDate)
