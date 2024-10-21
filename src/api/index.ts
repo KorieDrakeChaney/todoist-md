@@ -81,7 +81,6 @@ type DiffOptions = {
 export class TodoistAPI {
   private readonly vault: Vault;
   private readonly plugin: TodoistMarkdownPlugin;
-  private syncToken: string | null = null;
   private commands: Command<unknown>[] = [];
 
   private projectNameToIdMap: Record<string, string> = {};
@@ -210,14 +209,13 @@ export class TodoistAPI {
     if (data.projects) this.syncProjects(data.projects);
     if (data.items) this.syncItems(data.items);
 
-    if (completedResponse && completedResponse.status === 200) {
-      const completedData = parseResponse<TodoistCompletedResponse>(
-        completedResponse.body
-      );
-      await this.syncCompletedItems(completedData.items);
-    }
+    const completedData =
+      completedResponse?.status === 200
+        ? parseResponse<TodoistCompletedResponse>(completedResponse.body)
+        : { items: [] };
 
-    this.syncToken = data.sync_token;
+    await this.syncCompletedItems(completedData.items);
+
     this.temp_id_mapping = data.temp_id_mapping;
 
     return data;
@@ -714,30 +712,32 @@ export class TodoistAPI {
     for (let [projId, project] of Object.entries(projectDiffMap)) {
       if (!project.hasUpdates) continue;
 
-      this.plugin.settings.previousProjects[projId] = project.body.reduce(
-        (acc: string[], todo) => {
-          if (typeof todo === "string") return acc;
-
-          let itemId = todo.id;
-          let tempIdMapped = this.temp_id_mapping[itemId];
-          todo.id = tempIdMapped ? tempIdMapped : todo.id;
-          let syncedItem = this.syncedItems[todo.id];
-
-          if (syncedItem) {
-            acc.push(todo.id);
-          }
-
-          return acc;
-        },
-        [] as string[]
-      );
-
       let tempIdMapped = this.temp_id_mapping[projId];
 
       let projPath: string = project.filePath;
 
       if (tempIdMapped) {
         projId = tempIdMapped;
+      }
+
+      if (tempIdMapped || this.syncedProjects[projId]) {
+        this.plugin.settings.previousProjects[projId] = project.body.reduce(
+          (acc: string[], todo) => {
+            if (typeof todo === "string") return acc;
+
+            let itemId = todo.id;
+            let tempIdMapped = this.temp_id_mapping[itemId];
+            todo.id = tempIdMapped ? tempIdMapped : todo.id;
+            let syncedItem = this.syncedItems[todo.id];
+
+            if (syncedItem) {
+              acc.push(todo.id);
+            }
+
+            return acc;
+          },
+          [] as string[]
+        );
       }
 
       let syncedProject = this.syncedProjects[projId];
@@ -1207,9 +1207,7 @@ export class TodoistAPI {
             id: todo.id
           });
         } else if (canChange) todo.completed = false;
-      }
-
-      if (shouldUncomplete(syncedItem, todo)) {
+      } else if (shouldUncomplete(syncedItem, todo)) {
         didUpdate = true;
         if (isPush) {
           this.plugin.settings.completedTodos[todo.id] = todo;
@@ -1217,10 +1215,6 @@ export class TodoistAPI {
             id: todo.id
           });
         } else if (canChange) todo.completed = true;
-      }
-
-      if (todo.completed) {
-        this.plugin.settings.completedTodos[todo.id] = todo;
       }
     }
 
@@ -1276,6 +1270,12 @@ export class TodoistAPI {
     let currentTodo: Todo | null = null;
     let buffer = "";
 
+    const dueObj = new Date();
+    const dueString = `${dueObj.getFullYear()}-${
+      dueObj.getMonth() + 1
+    }-${dueObj.getDate()}`;
+    const object = getDueDate(dueString);
+
     const pushCurrentTodo = () => {
       if (!currentTodo) return;
 
@@ -1294,12 +1294,6 @@ export class TodoistAPI {
       }
 
       if (currentTodo.due || (syncedItem && syncedItem.due)) {
-        const dueObj = new Date();
-        const dueString = `${dueObj.getFullYear()}-${
-          dueObj.getMonth() + 1
-        }-${dueObj.getDate()}`;
-        const object = getDueDate(dueString);
-
         if (!syncedItem || !syncedItem.completed) {
           currentTodo.due = object;
         }
