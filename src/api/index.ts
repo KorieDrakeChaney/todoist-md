@@ -457,8 +457,9 @@ export class TodoistAPI {
     }
 
     if (
-      this.plugin.app.vault.getFolderByPath(this.plugin.settings.directory) ===
-      null
+      !(await this.plugin.app.vault.adapter.exists(
+        this.plugin.settings.directory
+      ))
     ) {
       await this.plugin.app.vault.createFolder(this.plugin.settings.directory);
     }
