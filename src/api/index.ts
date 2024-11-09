@@ -859,7 +859,7 @@ export class TodoistAPI {
       let due = "";
 
       if (todo.due) {
-        const todoDueDate = new Date(todo.due.date);
+        const todoDueDate = new Date(todo.due.date.replaceAll("-", "/"));
         const dueState = getDueState(currentDate, todoDueDate);
         const showColor = this.plugin.settings.showDueColor;
         switch (dueState) {
