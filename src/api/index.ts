@@ -79,7 +79,6 @@ type DiffOptions = {
 };
 
 export class TodoistAPI {
-  private readonly vault: Vault;
   private readonly plugin: TodoistMarkdownPlugin;
   private commands: Command<unknown>[] = [];
 
@@ -96,7 +95,6 @@ export class TodoistAPI {
 
   constructor(plugin: TodoistMarkdownPlugin) {
     this.plugin = plugin;
-    this.vault = plugin.app.vault;
   }
 
   private clear() {
@@ -456,226 +454,224 @@ export class TodoistAPI {
       index++;
     }
 
-    if (
-      !(await this.plugin.app.vault.adapter.exists(
-        this.plugin.settings.directory
-      ))
-    ) {
-      await this.plugin.app.vault.createFolder(this.plugin.settings.directory);
-    }
-
-    const files = this.vault.getMarkdownFiles();
-
     const syncedProjectsCopy = { ...this.syncedProjects };
     const syncedItemsCopy = { ...this.syncedItems };
 
-    for (let file of files) {
-      if (!(file.extension === "md") || !file.path.startsWith(this.directory))
-        continue;
+    try {
+      await this.vault.createFolder(this.directory);
+    } catch (_) {
+      let { files } = await this.vault.adapter.list(this.directory);
+      for (let path of files) {
+        if (!path.endsWith(".md")) continue;
 
-      let hasUpdates = false;
-      let needsRename = false;
+        let hasUpdates = false;
+        let needsRename = false;
 
-      let { name, id: projId } = parseBaseName(file.basename);
+        let basename = path.split("/").pop().slice(0, -3);
 
-      let content = await this.vault.adapter.read(file.path);
-      let syncedProj = this.syncedProjects[projId];
+        let { name, id: projId } = parseBaseName(basename);
 
-      let projmtime = this.plugin.settings.fileLastModifiedTime[file.path];
+        let content = await this.vault.adapter.read(path);
+        let syncedProj = this.syncedProjects[projId];
 
-      if (
-        isPush &&
-        projmtime === file.stat.mtime &&
-        !forcedUpdate &&
-        !projectsThatAreForced[projId]
-      ) {
-        if (syncedProj) {
-          for (let id of this.plugin.settings.previousProjects[projId]) {
-            if (registeredFilesLinked[id]) {
-              for (let index of registeredFilesLinked[id]) {
+        let projmtime = this.plugin.settings.fileLastModifiedTime[path];
+
+        const stat = await this.vault.adapter.stat(path);
+
+        if (
+          isPush &&
+          projmtime === stat.mtime &&
+          !forcedUpdate &&
+          !projectsThatAreForced[projId]
+        ) {
+          if (syncedProj) {
+            for (let id of this.plugin.settings.previousProjects[projId]) {
+              if (registeredFilesLinked[id]) {
+                for (let index of registeredFilesLinked[id]) {
+                  projectDiff[index].hasUpdates = true;
+                }
+              }
+              delete syncedItemsCopy[id];
+            }
+            delete syncedProjectsCopy[projId];
+            delete this.plugin.settings.previousProjects[projId];
+          }
+          continue;
+        }
+
+        if (!projId || !syncedProj || projectDiff[path]) {
+          hasUpdates = true;
+          projId = generateUUID();
+
+          if (isPush) {
+            this.projectAdd(
+              {
+                name: name
+              },
+              projId
+            );
+            needsRename = true;
+          } else if (canChange) {
+            await this.vault.adapter.remove(path);
+            continue;
+          }
+        } else {
+          if (syncedProj.name !== name) {
+            hasUpdates = true;
+            if (isPush) {
+              this.projectUpdate({
+                id: projId,
+                name: name
+              });
+            } else if (canChange) {
+              needsRename = true;
+            }
+          }
+
+          delete syncedProjectsCopy[projId];
+        }
+
+        const lines = content.split("\n");
+        const body: TodoBody = [];
+
+        let buffer: string = "";
+        let todoDiff: Record<string, boolean> = {};
+        let currentTodo: Todo | null = null;
+
+        const pushCurrentTodo = () => {
+          if (buffer.length > 0) {
+            currentTodo.description = buffer
+              .replace(/`/g, "")
+              .split("\n")
+              .map((line) => line.trim())
+              .join("\n");
+
+            buffer = "";
+          }
+
+          let syncedItem = this.syncedItems[currentTodo.id];
+
+          if (!this.plugin.settings.showDescription && syncedItem)
+            currentTodo.description = syncedItem.description;
+
+          if (
+            !isPush &&
+            canChange &&
+            (!currentTodo.id ||
+              !this.syncedItems[currentTodo.id] ||
+              todoDiff[currentTodo.id])
+          ) {
+            hasUpdates = true;
+            currentTodo = null;
+            return;
+          }
+
+          body.push(currentTodo);
+
+          if (
+            this.getDiffOfTodo(
+              currentTodo,
+              !!todoDiff[currentTodo.id],
+              { isPush, canChange },
+              syncedRegisteredTodos[currentTodo.id]
+            )
+          ) {
+            if (registeredFilesLinked[currentTodo.id]) {
+              for (let index of registeredFilesLinked[currentTodo.id]) {
                 projectDiff[index].hasUpdates = true;
               }
             }
-            delete syncedItemsCopy[id];
+            hasUpdates = true;
           }
-          delete syncedProjectsCopy[projId];
-          delete this.plugin.settings.previousProjects[projId];
-        }
-        continue;
-      }
 
-      if (!projId || !syncedProj || projectDiff[file.path]) {
-        hasUpdates = true;
-        projId = generateUUID();
-
-        if (isPush) {
-          this.projectAdd(
-            {
-              name: name
-            },
-            projId
-          );
-          needsRename = true;
-        } else if (canChange) {
-          await this.vault.adapter.remove(file.path);
-          continue;
-        }
-      } else {
-        if (syncedProj.name !== name) {
-          hasUpdates = true;
-          if (isPush) {
-            this.projectUpdate({
-              id: projId,
-              name: name
-            });
-          } else if (canChange) {
-            needsRename = true;
-          }
-        }
-
-        delete syncedProjectsCopy[projId];
-      }
-
-      const lines = content.split("\n");
-      const body: TodoBody = [];
-
-      let buffer: string = "";
-      let todoDiff: Record<string, boolean> = {};
-      let currentTodo: Todo | null = null;
-
-      const pushCurrentTodo = () => {
-        if (buffer.length > 0) {
-          currentTodo.description = buffer
-            .replace(/`/g, "")
-            .split("\n")
-            .map((line) => line.trim())
-            .join("\n");
-
-          buffer = "";
-        }
-
-        let syncedItem = this.syncedItems[currentTodo.id];
-
-        if (!this.plugin.settings.showDescription && syncedItem)
-          currentTodo.description = syncedItem.description;
-
-        if (
-          !isPush &&
-          canChange &&
-          (!currentTodo.id ||
-            !this.syncedItems[currentTodo.id] ||
-            todoDiff[currentTodo.id])
-        ) {
-          hasUpdates = true;
+          todoDiff[currentTodo.id] = true;
+          delete syncedItemsCopy[currentTodo.id];
           currentTodo = null;
-          return;
-        }
+        };
 
-        body.push(currentTodo);
+        for (const line of lines) {
+          const todo = parseTodo(line, projId, projmtime);
+          if (todo) {
+            if (currentTodo) pushCurrentTodo();
 
-        if (
-          this.getDiffOfTodo(
-            currentTodo,
-            !!todoDiff[currentTodo.id],
-            { isPush, canChange },
-            syncedRegisteredTodos[currentTodo.id]
-          )
-        ) {
-          if (registeredFilesLinked[currentTodo.id]) {
-            for (let index of registeredFilesLinked[currentTodo.id]) {
-              projectDiff[index].hasUpdates = true;
-            }
-          }
-          hasUpdates = true;
-        }
+            if (!todo.priority)
+              todo.priority = this.plugin.settings.priorityMap[todo.id];
 
-        todoDiff[currentTodo.id] = true;
-        delete syncedItemsCopy[currentTodo.id];
-        currentTodo = null;
-      };
-
-      for (const line of lines) {
-        const todo = parseTodo(line, projId, projmtime);
-        if (todo) {
-          if (currentTodo) pushCurrentTodo();
-
-          if (!todo.priority)
-            todo.priority = this.plugin.settings.priorityMap[todo.id];
-
-          currentTodo = todo;
-        } else {
-          if (!line.startsWith("\t") && !line.startsWith("    ")) {
-            if (currentTodo) {
-              pushCurrentTodo();
-            }
-            body.push(line + "\n");
+            currentTodo = todo;
           } else {
-            if (currentTodo) {
-              buffer += buffer.length > 0 ? "\n" + line : line;
-            } else {
+            if (!line.startsWith("\t") && !line.startsWith("    ")) {
+              if (currentTodo) {
+                pushCurrentTodo();
+              }
               body.push(line + "\n");
+            } else {
+              if (currentTodo) {
+                buffer += buffer.length > 0 ? "\n" + line : line;
+              } else {
+                body.push(line + "\n");
+              }
             }
           }
         }
-      }
 
-      if (currentTodo) {
-        pushCurrentTodo();
-      } else if (buffer.length > 0) {
-        body.push(buffer);
-      }
+        if (currentTodo) {
+          pushCurrentTodo();
+        } else if (buffer.length > 0) {
+          body.push(buffer);
+        }
 
-      if (!hasUpdates && !forcedUpdate) {
-        let currentPriority: number | null = null;
-        let completedScope = false;
-        for (let i = 0; i < body.length; i++) {
-          let todo = body[i];
-          if (typeof todo === "string") {
-            currentPriority = null;
-            continue;
-          }
-
-          if (i != body.length - 1) {
-            let next = body[i + 1];
-            if (typeof next === "string") {
+        if (!hasUpdates && !forcedUpdate) {
+          let currentPriority: number | null = null;
+          let completedScope = false;
+          for (let i = 0; i < body.length; i++) {
+            let todo = body[i];
+            if (typeof todo === "string") {
               currentPriority = null;
-              completedScope = false;
               continue;
             }
 
-            if (currentPriority === null) {
-              currentPriority = todo.priority;
-            }
-
-            if (todo.completed && !completedScope) {
-              completedScope = true;
-              currentPriority = todo.priority;
-            } else if (!todo.completed) {
-              if (completedScope) {
-                hasUpdates = true;
-                break;
-              } else if (next.completed) {
+            if (i != body.length - 1) {
+              let next = body[i + 1];
+              if (typeof next === "string") {
+                currentPriority = null;
+                completedScope = false;
                 continue;
               }
-            }
 
-            if (currentPriority < next.priority) {
-              hasUpdates = true;
-              break;
-            } else {
-              currentPriority = next.priority;
+              if (currentPriority === null) {
+                currentPriority = todo.priority;
+              }
+
+              if (todo.completed && !completedScope) {
+                completedScope = true;
+                currentPriority = todo.priority;
+              } else if (!todo.completed) {
+                if (completedScope) {
+                  hasUpdates = true;
+                  break;
+                } else if (next.completed) {
+                  continue;
+                }
+              }
+
+              if (currentPriority < next.priority) {
+                hasUpdates = true;
+                break;
+              } else {
+                currentPriority = next.priority;
+              }
             }
           }
         }
-      }
 
-      projectDiff[projId] = {
-        name: name,
-        body: body,
-        filePath: file.path,
-        needsRename,
-        hasUpdates: forcedUpdate || hasUpdates || !isPush
-      };
+        projectDiff[projId] = {
+          name: name,
+          body: body,
+          filePath: path,
+          needsRename,
+          hasUpdates: forcedUpdate || hasUpdates || !isPush
+        };
+      }
     }
 
     for (const [projId, project] of Object.entries(syncedProjectsCopy)) {
@@ -941,6 +937,10 @@ export class TodoistAPI {
 
   get directory(): string {
     return this.plugin.settings.directory;
+  }
+
+  get vault(): Vault {
+    return this.plugin.app.vault;
   }
 
   private getPriorityColor = (priority: Priority): string => {

@@ -23,36 +23,33 @@ export default class TodoistMarkdownPlugin extends Plugin {
 
   async onload() {
     let called = false;
-    this.registerMarkdownCodeBlockProcessor(
-      "todomd",
-      async (source, el, ctx) => {
-        if (called) {
-          return;
-        }
-        let activeView = this.app.workspace.getActiveViewOfType(TextFileView);
+    this.registerMarkdownCodeBlockProcessor("todomd", async (_, el, ctx) => {
+      if (called) {
+        return;
+      }
+      let activeView = this.app.workspace.getActiveViewOfType(TextFileView);
 
-        if (activeView) {
-          let ephemeralState = activeView.getEphemeralState() as EphemeralState;
+      if (activeView) {
+        let ephemeralState = activeView.getEphemeralState() as EphemeralState;
 
-          if (ephemeralState) {
-            let sectionInfo = ctx.getSectionInfo(el);
-            const sourcePath = ctx.sourcePath;
-            let { cursor } = ephemeralState;
-            let { from, to } = cursor;
-            let { lineEnd } = sectionInfo;
+        if (ephemeralState) {
+          let sectionInfo = ctx.getSectionInfo(el);
+          const sourcePath = ctx.sourcePath;
+          let { cursor } = ephemeralState;
+          let { from, to } = cursor;
+          let { lineEnd } = sectionInfo;
 
-            if (from.line > lineEnd) {
-              called = true;
-              await this.services.todoistAPI.pushCodeBlock(
-                sectionInfo,
-                sourcePath
-              );
-              called = false;
-            }
+          if (from.line > lineEnd) {
+            called = true;
+            await this.services.todoistAPI.pushCodeBlock(
+              sectionInfo,
+              sourcePath
+            );
+            called = false;
           }
         }
       }
-    );
+    });
 
     await this.loadSettings();
 
